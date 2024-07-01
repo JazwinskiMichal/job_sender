@@ -1,0 +1,71 @@
+substitutions:
+  _REGION: us-central1
+  _PROJECT_ID: job-sender-424116
+  #_PROJECT_NUMBER: '538044212952'
+  _SERVICE_NAME: job-sender
+  _IMAGE_NAME: job-sender
+  _IMAGE_TAG: v1.0.0
+  _REPOSITORY: job-sender-repository
+
+steps:
+  # Check if the repository exists and create it if not
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        if ! gcloud artifacts repositories describe $_REPOSITORY --location=$_REGION --project=$_PROJECT_ID; then
+          echo "Repository does not exist, creating..."
+          gcloud artifacts repositories create $_REPOSITORY --repository-format=docker --location=$_REGION --project=$_PROJECT_ID
+        fi
+  # Create the Bucket for the images
+  # - name: 'gcr.io/cloud-builders/gsutil'
+  #   entrypoint: 'sh'
+  #   args:
+  #     - '-c'
+  #     - |
+  #       if ! gsutil ls gs://$_IMAGES_BUCKET_NAME; then
+  #         echo "Bucket does not exist, creating..."
+  #         gsutil mb -l $_REGION gs://$_IMAGES_BUCKET_NAME
+  #       fi
+
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPOSITORY/$_IMAGE_NAME:$_IMAGE_TAG', '.']
+
+  # Push the Docker image to the Google Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPOSITORY/$_IMAGE_NAME:$_IMAGE_TAG']
+
+  # Describe the Docker image
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: ['artifacts', 'docker', 'images', 'describe', '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPOSITORY/$_IMAGE_NAME:$_IMAGE_TAG']
+
+  # Deploy the Docker image to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image'
+      - '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPOSITORY/$_IMAGE_NAME:$_IMAGE_TAG'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '2'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '3'
+      - '--service-account'
+      - 'sa-backend@job-sender-424116.iam.gserviceaccount.com'
+      # - '--set-env-vars'
+      # - 'GOOGLE_CLOUD_PROJECT_ID=$_PROJECT_ID,GOOGLE_CLOUD_PROJECT_NUMBER=$_PROJECT_NUMBER,SECRET_NAME_SERVICE_ACCOUNT_KEY=$_SECRET_NAME_SERVICE_ACCOUNT_KEY,SECRET_NAME_FIREBASE_WEB_API_KEY=$_SECRET_NAME_FIREBASE_WEB_API_KEY,SECRET_NAME_GMAIL_EMAIL=$_SECRET_NAME_GMAIL_EMAIL,SECRET_NAME_GMAIL_APP_PASSWORD=$_SECRET_NAME_GMAIL_APP_PASSWORD, IMAGES_BUCKET_NAME=$_IMAGES_BUCKET_NAME'
+      
+images:
+  - '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPOSITORY/$_IMAGE_NAME:$_IMAGE_TAG'
