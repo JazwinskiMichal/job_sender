@@ -17,6 +17,9 @@ RUN go mod download
 # Copy the source from the current directory to the working Directory inside the container
 COPY . .
 
+# Copy the templates directory
+COPY templates templates
+
 # Build the Go app
 RUN go build -a -installsuffix cgo -o /go/bin/job_sender .
 
@@ -50,6 +53,9 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
 
 # Copy the pre-built binary file from the previous stage
 COPY --from=builder /go/bin/job_sender /go/bin/job_sender
+
+# Copy the templates directory from the builder stage
+COPY --from=builder /go/src/job_sender/templates /templates
 
 # Document that the service listens on port 8080.
 EXPOSE 8080

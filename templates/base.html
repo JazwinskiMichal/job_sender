@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Job sender</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="/main">Job sender</a>
+            </div>
+            {{if .IsLoggedIn}}
+            <div class="navbar-right">
+                <p class="navbar-text">Signed in as <strong>{{.Email}}</strong> | 
+                  {{if .IsVerified}}Verified{{else}}Not Verified{{end}}</p>
+                <form action="/logout" method="post" class="navbar-form" style="display: inline-block;">
+                    <button type="submit" class="btn btn-default">Logout</button>
+                </form>
+            </div>
+            {{end}}
+        </div>
+      </nav>
+    <div class="container">
+      {{template "body" .Data}}
+    </div>
+</body>
+</html>

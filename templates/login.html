@@ -1,0 +1,20 @@
+<form method="post" action="/login">
+    <!-- Error Message Placeholder -->
+    {{if .ErrorMessage}}
+    <div id="loginError" class="alert alert-danger">
+        {{.ErrorMessage}}
+    </div>
+    {{end}}
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <input class="form-control" name="email" id="email">
+    </div>
+    <div class="form-group">
+        <label for="password">Password</label>
+        <input class="form-control" name="password" id="password" type="password">
+    </div>
+    <button class="btn btn-success">Login</button>
+</form>
+
+<p>Don't have an account? <a href="/register">Register here</a>.</p>
