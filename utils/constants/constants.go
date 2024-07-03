@@ -8,6 +8,8 @@ const (
 
 	TemplatesDir                = "/templates"
 	TemplatesBaseName           = "base.html"
+	TemplateListName            = "list.html"
+	TemplateEditName            = "edit.html"
 	TemplateLoginName           = "login.html"
 	TemplateRegisterName        = "register.html"
 	TemplateConfirmRegisterName = "confirm_registration.html"

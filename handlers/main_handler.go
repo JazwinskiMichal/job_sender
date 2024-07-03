@@ -44,7 +44,7 @@ func (h *MainHandler) showMain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if userInfo.IsLoggedIn {
-		http.Redirect(w, r, "/auth/hashTags", http.StatusFound)
+		http.Redirect(w, r, "/auth/contractors", http.StatusFound)
 	} else {
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}

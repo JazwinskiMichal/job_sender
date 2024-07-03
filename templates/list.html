@@ -1,0 +1,20 @@
+<h3>Contractors</h3>
+<a href="/auth/contractors/add" class="btn btn-success btn-sm">
+  <i class="glyphicon glyphicon-plus"></i>
+  <span>Add contractor</span>
+</a>
+
+{{range .}}
+<div class="media">
+  <div class="media-left">
+    <img src="{{if .PhotoURL}}{{.PhotoURL}}{{else}}https://placekitten.com/g/200/300{{end}}" style="border-radius: 50%; width: 128px; height: 128px; object-fit: cover;">
+  </div>
+  <div class="media-body">
+    <h4><a href="/auth/contractors/{{.ID}}">{{.Name}} {{.Surname}}</a></h4>
+    <p>{{.Email}}</p>
+    <p>{{.Phone}}</p>
+  </div>
+</div>
+{{else}}
+<p>No contractors found.</p>
+{{end}}

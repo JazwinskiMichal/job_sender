@@ -1,0 +1,28 @@
+<h3>{{if .}}Edit{{else}}Add{{end}} hash tag</h3>
+
+<form method="post" enctype="multipart/form-data" action="/contractors{{.groupID}}{{if .ID}}/{{.ID}}{{end}}">
+  {{if .ID}}
+  <div class="form-group">
+    <label for="ID">ID</label>
+    <input class="form-control" name="ID" id="ID" value="{{.ID}}" readonly>
+  </div>
+  {{end}}
+  <div class="form-group">
+    <label for="Name">Name</label>
+    <input class="form-control" name="name" id="name" value="{{if .}}{{.Name}}{{end}}">
+  </div>
+  <div class="form-group">
+    <label for="Surname">Surname</label>
+    <input class="form-control" name="surname" id="surname" value="{{if .}}{{.Surname}}{{end}}">
+  </div>
+  <div class="form-group">
+    <label for="Email">Email</label>
+    <input class="form-control" name="email" id="email" value="{{if .}}{{.Email}}{{end}}">
+  </div>
+  <div class="form-group">
+    <label for="image">Photo</label>
+    <input class="form-control" name="photo" id="photo" type="file">
+  </div>
+  <button class="btn btn-success">Save</button>
+  <input type="hidden" name="photoURL" value="{{.photoURL}}">
+</form>

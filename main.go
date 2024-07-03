@@ -99,6 +99,16 @@ func main() {
 	somethingWentWrongHandler := handlers.NewSomethingWentWrongHandler(templateService)
 	somethingWentWrongHandler.RegisterSomethingWentWrongHandlers(router)
 
+	// Create contractors db service
+	contractorsDB, err := core.NewContractorsDatabaseService(firebaseService)
+	if err != nil {
+		log.Fatalf("NewContractorsDatabaseService: %v", err)
+	}
+
+	// Create contractor handler
+	contractorHandler := handlers.NewContractorHandler(authService, contractorsDB, templateService, errorReporterService)
+	contractorHandler.RegisterContractorHandlers(authRouter)
+
 	// Start the server
 	if err := http.ListenAndServe(":"+envVariables.Port, router); err != nil {
 		log.Fatal(err)

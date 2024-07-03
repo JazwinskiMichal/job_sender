@@ -106,7 +106,7 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/auth/hashTags", http.StatusFound)
+	http.Redirect(w, r, "/auth/contractors", http.StatusFound)
 }
 
 // logout logs out the user.
