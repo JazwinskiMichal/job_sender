@@ -59,26 +59,28 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 
 	if email == "" || password == "" {
-		h.showError(w, r, "Email or password missing", "email or password missing")
+		h.showError(w, r, "Email or password missing")
 		return
 	}
 
 	// Login the user
 	responseBody, err := h.authService.Login(email, password)
 	if err != nil {
-		h.showError(w, r, "Invalid email or password", fmt.Sprintf("could not login user: %v", err))
+		h.showError(w, r, "Invalid email or password")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not login user: %w", err))
 		return
 	}
 
 	if responseBody.IdToken == "" {
-		h.showError(w, r, "Invalid email or password", "id token is empty")
+		h.showError(w, r, "Invalid email or password")
 		return
 	}
 
 	// Extract the expires in time
 	expiresIn, err := strconv.ParseInt(responseBody.ExpiresIn, 10, 64)
 	if err != nil {
-		h.showError(w, r, "Could not parse expires in time", fmt.Sprintf("could not parse expires in time: %v", err))
+		h.showError(w, r, "Could not parse expires in time")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse expires in time: %w", err))
 		return
 	}
 
@@ -88,7 +90,8 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 	// Check if the user is verified
 	isVerified, err := h.firebaseService.CheckIsUserVerified(email)
 	if err != nil {
-		h.showError(w, r, "Could not check if user is verified", fmt.Sprintf("could not check if user is verified: %v", err))
+		h.showError(w, r, "Could not check if user is verified")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check if user is verified: %w", err))
 		return
 	}
 
@@ -97,16 +100,19 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 		constants.UserSessionTokenField:     responseBody.IdToken,
 		constants.UserSessionEmailField:     responseBody.Email,
 		constants.UserSessionIsVerfiedField: isVerified,
+		constants.UserSesstionOwnerIdField:  responseBody.LocalId, // TODO: Sprawdzic czy to zawsze jest ta sama wartość dla danego usera
 	}
 
 	// Create the session
+	// TODO: czy lepiej tutaj trzymac owner id wgl nie zapisywac do session i doczytywac z bazy jak w mainhandler?
 	err = h.sessionManagerService.CreateSession(w, r, constants.UserSessionName, expirationTimestamp, data)
 	if err != nil {
-		h.showError(w, r, "Could not create session", fmt.Sprintf("could not create session: %v", err))
+		h.showError(w, r, "Could not create session")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create session: %w", err))
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/auth/owners/%s", responseBody.LocalId), http.StatusFound)
 }
 
 // logout logs out the user.
@@ -122,9 +128,7 @@ func (h *LoginHandler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // showError renders the login page with an error message.
-func (h *LoginHandler) showError(w http.ResponseWriter, r *http.Request, errorMessage string, debugErrorMessage string) {
-	h.errorReporterService.ReportError(w, r, fmt.Errorf("login error: %s", debugErrorMessage))
-
+func (h *LoginHandler) showError(w http.ResponseWriter, r *http.Request, errorMessage string) {
 	loginTmpl, err := h.templateService.ParseTemplate(constants.TemplateLoginName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse login template: %w", err))

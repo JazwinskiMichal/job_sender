@@ -8,16 +8,20 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type MainHandler struct {
 	authService          *core.AuthService
+	ownersDB             *core.OwnerDatabaseService
 	errorReporterService *core.ErrorReporterService
 }
 
-func NewMainHandler(authService *core.AuthService, errorReporterService *core.ErrorReporterService) *MainHandler {
+func NewMainHandler(authService *core.AuthService, ownersDB *core.OwnerDatabaseService, errorReporterService *core.ErrorReporterService) *MainHandler {
 	return &MainHandler{
 		authService:          authService,
+		ownersDB:             ownersDB,
 		errorReporterService: errorReporterService,
 	}
 }
@@ -44,7 +48,20 @@ func (h *MainHandler) showMain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if userInfo.IsLoggedIn {
-		http.Redirect(w, r, "/auth/contractors", http.StatusFound)
+		// Get owner by email
+		owner, err := h.ownersDB.GetOwnerByEmail(userInfo.Email)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				http.Redirect(w, r, "/auth/owners/add", http.StatusFound)
+				return
+			}
+
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner by email: %w", err))
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			return
+		}
+
+		http.Redirect(w, r, "/auth/owners/"+owner.ID, http.StatusFound)
 	} else {
 		http.Redirect(w, r, "/login", http.StatusFound)
 	}

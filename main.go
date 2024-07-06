@@ -76,8 +76,14 @@ func main() {
 	authService := core.NewAuthService(firebaseService, string(firebaseWebApiKey), sessionManagerService)
 	authMiddleware := middlewares.NewAuthMiddleware(authService, errorReporterService)
 
+	// Create owners db service
+	ownersDB, err := core.NewOwnerDatabaseService(firebaseService)
+	if err != nil {
+		log.Fatalf("NewOwnerDatabaseService: %v", err)
+	}
+
 	// Create new Main handler and router
-	mainHandler := handlers.NewMainHandler(authService, errorReporterService)
+	mainHandler := handlers.NewMainHandler(authService, ownersDB, errorReporterService)
 
 	// Create the router
 	router := mainHandler.CreateRouter()
@@ -99,15 +105,29 @@ func main() {
 	somethingWentWrongHandler := handlers.NewSomethingWentWrongHandler(templateService)
 	somethingWentWrongHandler.RegisterSomethingWentWrongHandlers(router)
 
+	// Create the groups db service
+	groupsDB, err := core.NewGroupsDatabaseService(firebaseService)
+	if err != nil {
+		log.Fatalf("NewGroupsDatabaseService: %v", err)
+	}
+
 	// Create contractors db service
 	contractorsDB, err := core.NewContractorsDatabaseService(firebaseService)
 	if err != nil {
 		log.Fatalf("NewContractorsDatabaseService: %v", err)
 	}
 
+	// Create owners handler
+	ownersHandler := handlers.NewOwnersHandler(authService, ownersDB, sessionManagerService, templateService, errorReporterService)
+	ownersHandler.RegisterOwnersHandlers(authRouter)
+
+	// Create groups handler
+	groupsHandler := handlers.NewGroupsHandler(authService, ownersDB, groupsDB, sessionManagerService, templateService, errorReporterService)
+	groupsHandler.RegisterGroupsHandlers(authRouter)
+
 	// Create contractor handler
-	contractorHandler := handlers.NewContractorHandler(authService, contractorsDB, templateService, errorReporterService)
-	contractorHandler.RegisterContractorHandlers(authRouter)
+	contractorsHandler := handlers.NewContractorsHandler(authService, groupsDB, contractorsDB, templateService, errorReporterService)
+	contractorsHandler.RegisterContractorsHandler(authRouter)
 
 	// Start the server
 	if err := http.ListenAndServe(":"+envVariables.Port, router); err != nil {

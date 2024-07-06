@@ -1,7 +1,7 @@
 package types
 
-// Contractor holds metadata about a contractor.
-type Contractor struct {
+// Owner holds metadata about the owner of a group.
+type Owner struct {
 	ID      string `firestore:"id"`
 	GroupID string `firestore:"group_id"`
 

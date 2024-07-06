@@ -2,27 +2,31 @@ package handlers
 
 import (
 	"fmt"
-	"job_sender/core"
-	"job_sender/types"
 	"net/http"
 
+	"job_sender/core"
+	"job_sender/types"
 	constants "job_sender/utils/constants"
 
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-type ContractorHandler struct {
+type ContractorsHandler struct {
 	authService   *core.AuthService
+	groupsDB      *core.GroupsDatabaseService
 	contractorsDB *core.ContractorsDatabaseService
 	//storageService       *core.StorageService
 	templateService      *core.TemplateService
 	errorReporterService *core.ErrorReporterService
 }
 
-// NewContractorHandler creates a new ContractorHandler.
-func NewContractorHandler(authService *core.AuthService, contractorsDB *core.ContractorsDatabaseService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService) *ContractorHandler {
-	return &ContractorHandler{
+// NewContractorsHandler creates a new ContractorsHandler.
+func NewContractorsHandler(authService *core.AuthService, groupsDB *core.GroupsDatabaseService, contractorsDB *core.ContractorsDatabaseService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService) *ContractorsHandler {
+	return &ContractorsHandler{
 		authService:   authService,
+		groupsDB:      groupsDB,
 		contractorsDB: contractorsDB,
 		//storageService:       storageService,
 		templateService:      templateService,
@@ -31,26 +35,57 @@ func NewContractorHandler(authService *core.AuthService, contractorsDB *core.Con
 }
 
 // Register contractor handlers.
-func (h *ContractorHandler) RegisterContractorHandlers(r *mux.Router) {
+func (h *ContractorsHandler) RegisterContractorsHandler(r *mux.Router) {
 	r.Methods("GET").Path("/contractors").HandlerFunc(h.ListContractors)
 	r.Methods("GET").Path("/contractors/add").HandlerFunc(h.ShowAddContractor)
 	r.Methods("GET").Path("/contractors/{ID}").HandlerFunc(h.GetContractor)
 
-	r.Methods("POST").Path("/contractors{groupID}").HandlerFunc(h.AddContractor)
-	r.Methods("PUT").Path("/contractors{ID}").HandlerFunc(h.UpdateContractor)
+	r.Methods("POST").Path("/contractors").HandlerFunc(h.AddContractor)
+	r.Methods("POST").Path("/contractors/{ID}").HandlerFunc(h.EditContractor)
 
-	r.Methods("DELETE").Path("/contractors{ID}").HandlerFunc(h.DeleteContractor)
+	r.Methods("DELETE").Path("/contractors/{ID}").HandlerFunc(h.DeleteContractor)
 }
 
 // ListContractors lists all contractors for a group.
-func (h *ContractorHandler) ListContractors(w http.ResponseWriter, r *http.Request) {
-	// Get the group ID from the request.
-	groupID := mux.Vars(r)["groupID"]
+func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Request) {
+	// Get the group ID from the query.
+	groupID := r.URL.Query().Get("groupID")
 	if groupID == "" {
 		http.Error(w, "groupID is required", http.StatusBadRequest)
 		return
 	}
-	// TODO: Dodać group database service i w tym miejscu gdy nie ma żadnej grupy do odpalic widok tworzenia nowej grupy
+
+	userInfo, err := h.authService.CheckUser(r)
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		return
+	}
+
+	// Get the group.
+	_, err = h.groupsDB.GetGroup(groupID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			// Display the add group page.
+			groupTmpl, err := h.templateService.ParseTemplate(constants.TemplateGroupEditName)
+			if err != nil {
+				h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse group template: %w", err))
+				http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+				return
+			}
+
+			err = h.templateService.ExecuteTemplate(groupTmpl, w, r, nil, userInfo)
+			if err != nil {
+				h.errorReporterService.ReportError(w, r, err)
+				http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+				return
+			}
+		} else {
+			h.errorReporterService.ReportError(w, r, err)
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			return
+		}
+	}
 
 	// Get the contractors.
 	contractors, err := h.contractorsDB.ListContractors(groupID)
@@ -60,21 +95,19 @@ func (h *ContractorHandler) ListContractors(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	userInfo, err := h.authService.CheckUser(r)
-	if err != nil {
-		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
-		return
+	data := map[string]interface{}{
+		"GroupID":     groupID,
+		"Contractors": contractors,
 	}
 
-	listTmpl, err := h.templateService.ParseTemplate(constants.TemplateListName)
+	listTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsListName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse list template: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
 		return
 	}
 
-	err = h.templateService.ExecuteTemplate(listTmpl, w, r, contractors, userInfo)
+	err = h.templateService.ExecuteTemplate(listTmpl, w, r, data, userInfo)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not execute template: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
@@ -83,7 +116,14 @@ func (h *ContractorHandler) ListContractors(w http.ResponseWriter, r *http.Reque
 }
 
 // ShowAddContractor shows the form to add a contractor.
-func (h *ContractorHandler) ShowAddContractor(w http.ResponseWriter, r *http.Request) {
+func (h *ContractorsHandler) ShowAddContractor(w http.ResponseWriter, r *http.Request) {
+	// Get the group ID from the query.
+	groupID := r.URL.Query().Get("groupID")
+	if groupID == "" {
+		http.Error(w, "groupID is required", http.StatusBadRequest)
+		return
+	}
+
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
@@ -91,14 +131,22 @@ func (h *ContractorHandler) ShowAddContractor(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	addTmpl, err := h.templateService.ParseTemplate(constants.TemplateEditName)
+	addTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsAddName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse add template: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
 		return
 	}
 
-	err = h.templateService.ExecuteTemplate(addTmpl, w, r, nil, userInfo)
+	// Create the data to pass to the template
+	data := map[string]string{
+		"Name":    "",
+		"Surname": "",
+		"Email":   "",
+		"GroupID": groupID,
+	}
+
+	err = h.templateService.ExecuteTemplate(addTmpl, w, r, data, userInfo)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not execute template: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
@@ -107,7 +155,7 @@ func (h *ContractorHandler) ShowAddContractor(w http.ResponseWriter, r *http.Req
 }
 
 // GetContractor gets a contractor by ID.
-func (h *ContractorHandler) GetContractor(w http.ResponseWriter, r *http.Request) {
+func (h *ContractorsHandler) GetContractor(w http.ResponseWriter, r *http.Request) {
 	// Get the contractor ID from the request.
 	id := mux.Vars(r)["ID"]
 	if id == "" {
@@ -130,7 +178,7 @@ func (h *ContractorHandler) GetContractor(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	editTmpl, err := h.templateService.ParseTemplate(constants.TemplateEditName)
+	editTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsEditName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse edit template: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
@@ -146,9 +194,9 @@ func (h *ContractorHandler) GetContractor(w http.ResponseWriter, r *http.Request
 }
 
 // AddContractor adds a contractor to a group.
-func (h *ContractorHandler) AddContractor(w http.ResponseWriter, r *http.Request) {
-	// Get the group ID from the request.
-	groupID := mux.Vars(r)["groupID"]
+func (h *ContractorsHandler) AddContractor(w http.ResponseWriter, r *http.Request) {
+	// Get the group ID from the query.
+	groupID := r.URL.Query().Get("groupID")
 	if groupID == "" {
 		http.Error(w, "groupID is required", http.StatusBadRequest)
 		return
@@ -170,15 +218,22 @@ func (h *ContractorHandler) AddContractor(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound)
+	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusFound)
 }
 
-// UpdateContractor updates a contractor.
-func (h *ContractorHandler) UpdateContractor(w http.ResponseWriter, r *http.Request) {
-	// Get the contractor ID from the request.
+// EditContractor updates a contractor.
+func (h *ContractorsHandler) EditContractor(w http.ResponseWriter, r *http.Request) {
+	// Get the contractor id from the request.
 	id := mux.Vars(r)["ID"]
 	if id == "" {
-		http.Error(w, "ID is required", http.StatusBadRequest)
+		http.Error(w, "ID of the contractor is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get the group ID from the query.
+	groupID := r.URL.Query().Get("groupID")
+	if groupID == "" {
+		http.Error(w, "groupID is required", http.StatusBadRequest)
 		return
 	}
 
@@ -192,6 +247,7 @@ func (h *ContractorHandler) UpdateContractor(w http.ResponseWriter, r *http.Requ
 
 	// Update the contractor.
 	contractor.ID = id
+	contractor.GroupID = groupID
 	err = h.contractorsDB.UpdateContractor(contractor)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
@@ -199,11 +255,11 @@ func (h *ContractorHandler) UpdateContractor(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound)
+	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusFound)
 }
 
 // DeleteContractor deletes a contractor.
-func (h *ContractorHandler) DeleteContractor(w http.ResponseWriter, r *http.Request) {
+func (h *ContractorsHandler) DeleteContractor(w http.ResponseWriter, r *http.Request) {
 	// Get the contractor ID from the request.
 	id := mux.Vars(r)["ID"]
 	if id == "" {
@@ -219,11 +275,11 @@ func (h *ContractorHandler) DeleteContractor(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound)
+	http.Redirect(w, r, "/auth/contractors", http.StatusFound) // TODO: group id is needed
 }
 
 // contractorFromForm creates a contractor from a form.
-func (h *ContractorHandler) contractorFromForm(r *http.Request) (*types.Contractor, error) {
+func (h *ContractorsHandler) contractorFromForm(r *http.Request) (*types.Contractor, error) {
 	// ctx := r.Context()
 
 	// imageUrl, err := h.uploadFileFromForm(ctx, r)
@@ -239,7 +295,7 @@ func (h *ContractorHandler) contractorFromForm(r *http.Request) (*types.Contract
 		Surname:  r.FormValue("surname"),
 		Email:    r.FormValue("email"),
 		Phone:    r.FormValue("phone"),
-		PhotoURL: "",
+		PhotoURL: r.FormValue("photoURL"),
 	}
 
 	return contractor, nil

@@ -113,35 +113,37 @@ func (h *RegisterHandler) register(w http.ResponseWriter, r *http.Request) {
 	confirmPassword := r.FormValue("confirm_password")
 
 	if email == "" {
-		h.showError(w, r, "Email missing", "email missing")
+		h.showError(w, r, "Email missing")
 		return
 	}
 
 	// Check if the email is already registered
 	userExists, err := h.firebaseService.CheckIfUserExists(email)
 	if err != nil {
-		h.showError(w, r, "Could not register", fmt.Sprintf("could not check if user exists: %v", err))
+		h.showError(w, r, "Could not register")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check if user exists: %w", err))
 		return
 	}
 
 	if userExists {
-		h.showError(w, r, "Email already registered", "email already registered")
+		h.showError(w, r, "Email already registered")
 		return
 	}
 
 	if password == "" || confirmPassword == "" {
-		h.showError(w, r, "Password or confirm password missing", "Password or confirm password missing")
+		h.showError(w, r, "Password or confirm password missing")
 		return
 	}
 
 	if password != confirmPassword {
-		h.showError(w, r, "Password and confirm password do not match", "password and confirm password do not match")
+		h.showError(w, r, "Password and confirm password do not match")
 		return
 	}
 
 	_, err = h.authService.Register(email, password)
 	if err != nil {
-		h.showError(w, r, "Could not register", fmt.Sprintf("could not register user: %v", err))
+		h.showError(w, r, "Could not register")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not register user: %w", err))
 		return
 	}
 
@@ -149,19 +151,22 @@ func (h *RegisterHandler) register(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	client, err := h.firebaseService.Auth(ctx)
 	if err != nil {
-		h.showError(w, r, "Could not send verification email", fmt.Sprintf("could not get auth client: %v", err))
+		h.showError(w, r, "Could not send verification email")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get firebase auth client: %w", err))
 		return
 	}
 
 	link, err := client.EmailVerificationLink(ctx, email)
 	if err != nil {
-		h.showError(w, r, "Could not send verification email", fmt.Sprintf("could not get email verification link: %v", err))
+		h.showError(w, r, "Could not send verification email")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get email verification link: %w", err))
 		return
 	}
 
 	err = h.emailService.SendVerificationEmail(email, link)
 	if err != nil {
-		h.showError(w, r, "Could not send verification email", fmt.Sprintf("could not send verification email: %v", err))
+		h.showError(w, r, "Could not send verification email")
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not send verification email: %w", err))
 		return
 	}
 
@@ -180,10 +185,7 @@ func (h *RegisterHandler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 // showError displays an error message to the user.
-func (h *RegisterHandler) showError(w http.ResponseWriter, r *http.Request, errorMessage string, debugErrorMessage string) {
-	// TODO: nie zawsze wymagane jest reportowanie błędu, wydzielic to do osobnej metody
-	h.errorReporterService.ReportError(w, r, fmt.Errorf("login error: %s", debugErrorMessage))
-
+func (h *RegisterHandler) showError(w http.ResponseWriter, r *http.Request, errorMessage string) {
 	registerTmpl, err := h.templateService.ParseTemplate(constants.TemplateRegisterName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse register template: %w", err))

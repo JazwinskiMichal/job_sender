@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
-
 	"job_sender/interfaces"
 	"job_sender/types"
+
+	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type ContractorsDatabaseService struct {
-	collection string
-	client     *firestore.Client
+	collectionName string
+	client         *firestore.Client
 }
 
 // Ensure ContractorsDatabaseService implements IContractorsDatabaseService.
@@ -36,8 +38,8 @@ func NewContractorsDatabaseService(firebaseService *FirebaseService) (*Contracto
 	}
 
 	return &ContractorsDatabaseService{
-		collection: "contractors",
-		client:     client,
+		collectionName: "contractors",
+		client:         client,
 	}, nil
 }
 
@@ -49,7 +51,7 @@ func (db *ContractorsDatabaseService) Close(context.Context) error {
 // ListContractors lists all contractors for a group.
 func (db *ContractorsDatabaseService) ListContractors(groupID string) ([]*types.Contractor, error) {
 	ctx := context.Background()
-	iter := db.client.Collection(db.collection).Where("group_id", "==", groupID).Documents(ctx)
+	iter := db.client.Collection(db.collectionName).Where("group_id", "==", groupID).Documents(ctx)
 
 	var contractors []*types.Contractor
 	for {
@@ -75,7 +77,7 @@ func (db *ContractorsDatabaseService) ListContractors(groupID string) ([]*types.
 // GetContractor gets a contractor by ID.
 func (db *ContractorsDatabaseService) GetContractor(id string) (*types.Contractor, error) {
 	ctx := context.Background()
-	doc, err := db.client.Collection(db.collection).Doc(id).Get(ctx)
+	doc, err := db.client.Collection(db.collectionName).Doc(id).Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("firestoredb: could not get contractor: %w", err)
 	}
@@ -93,7 +95,7 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 	ctx := context.Background()
 
 	// Check if contractor already exists.
-	iter := db.client.Collection(db.collection).Where("email", "==", contractor.Email).Documents(ctx)
+	iter := db.client.Collection(db.collectionName).Where("email", "==", contractor.Email).Documents(ctx)
 	for {
 		_, err := iter.Next()
 		if err == iterator.Done {
@@ -103,13 +105,16 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 			return fmt.Errorf("firestoredb: could not check if contractor exists: %w", err)
 		}
 
-		return fmt.Errorf("firestoredb: contractor already exists")
+		if status.Code(err) == codes.AlreadyExists {
+			return fmt.Errorf("firestoredb: contractor already exists")
+		} else {
+			return fmt.Errorf("firestoredb: could not check if contractor exists: %w", err)
+		}
 	}
 
-	ref := db.client.Collection(db.collection).NewDoc()
+	ref := db.client.Collection(db.collectionName).NewDoc()
 	contractorMap := map[string]interface{}{
 		"id":        ref.ID,
-		"role":      contractor.Role,
 		"group_id":  groupID,
 		"name":      contractor.Name,
 		"surname":   contractor.Surname,
@@ -129,8 +134,8 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 // UpdateContractor updates a contractor.
 func (db *ContractorsDatabaseService) UpdateContractor(contractor *types.Contractor) error {
 	ctx := context.Background()
-	_, err := db.client.Collection(db.collection).Doc(contractor.ID).Set(ctx, map[string]interface{}{
-		"role":      contractor.Role,
+	_, err := db.client.Collection(db.collectionName).Doc(contractor.ID).Set(ctx, map[string]interface{}{
+		"id":        contractor.ID,
 		"group_id":  contractor.GroupID,
 		"name":      contractor.Name,
 		"surname":   contractor.Surname,
@@ -148,7 +153,7 @@ func (db *ContractorsDatabaseService) UpdateContractor(contractor *types.Contrac
 // DeleteContractor deletes a contractor.
 func (db *ContractorsDatabaseService) DeleteContractor(id string) error {
 	ctx := context.Background()
-	_, err := db.client.Collection(db.collection).Doc(id).Delete(ctx)
+	_, err := db.client.Collection(db.collectionName).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("firestoredb: could not delete contractor: %w", err)
 	}

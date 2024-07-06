@@ -4,7 +4,7 @@ substitutions:
   _PROJECT_NUMBER: '538044212952'
   _SERVICE_NAME: job-sender
   _IMAGE_NAME: job-sender
-  _IMAGE_TAG: v1.0.10
+  _IMAGE_TAG: v1.0.47
   _REPOSITORY: job-sender-repository
   _SECRET_NAME_SERVICE_ACCOUNT_KEY: job-sender-service-account-key
   _SECRET_NAME_FIREBASE_WEB_API_KEY: job-sender-firebase-web-api-key

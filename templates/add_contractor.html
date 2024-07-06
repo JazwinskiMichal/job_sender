@@ -1,0 +1,22 @@
+<h3>Add contractor</h3>
+
+<form method="post" enctype="multipart/form-data" action="/auth/contractors?groupID={{.GroupID}}">
+  <div class="form-group">
+    <label for="Name">Name</label>
+    <input class="form-control" name="name" id="name" value="{{if .}}{{.Name}}{{end}}">
+  </div>
+  <div class="form-group">
+    <label for="Surname">Surname</label>
+    <input class="form-control" name="surname" id="surname" value="{{if .}}{{.Surname}}{{end}}">
+  </div>
+  <div class="form-group">
+    <label for="Email">Email</label>
+    <input class="form-control" name="email" id="email" value="{{if .}}{{.Email}}{{end}}">
+  </div>
+  <div class="form-group">
+    <label for="image">Photo</label>
+    <input class="form-control" name="photoURL" id="photoURL" type="file">
+  </div>
+  <button class="btn btn-success">Save</button>
+  <input type="hidden" name="photoURL" value="{{.PhotoURL}}">
+</form>
