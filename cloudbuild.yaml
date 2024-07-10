@@ -4,8 +4,10 @@ substitutions:
   _PROJECT_NUMBER: '538044212952'
   _SERVICE_NAME: job-sender
   _IMAGE_NAME: job-sender
-  _IMAGE_TAG: v1.0.47
+  _IMAGE_TAG: v1.0.71
   _REPOSITORY: job-sender-repository
+  _TIMESHEETS_BUCKET_NAME: job-sender-timesheets
+  _EMAIL_AGGREGATOR_QUEUE_NAME: email-aggregator-queue
   _SECRET_NAME_SERVICE_ACCOUNT_KEY: job-sender-service-account-key
   _SECRET_NAME_FIREBASE_WEB_API_KEY: job-sender-firebase-web-api-key
   _SECRET_NAME_EMAIL_SERVICE_EMAIL: job-sender-email-service-email # TODO: zmienic na maila job sender, narazie uzyty mail z proteggo
@@ -13,6 +15,17 @@ substitutions:
   _SECRET_NAME_SESSION_COOKIE_STORE: job-sender-session-cookie-store-key
 
 steps:
+  # Create or update the Cloud Tasks queue
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        if ! gcloud tasks queues describe $_EMAIL_AGGREGATOR_QUEUE_NAME --location=$_REGION --project=$_PROJECT_ID; then
+          echo "Queue does not exist, creating..."
+          gcloud tasks queues create $_EMAIL_AGGREGATOR_QUEUE_NAME --location=$_REGION
+        fi
+
   # Check if the repository exists and create it if not
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'sh'
@@ -23,16 +36,17 @@ steps:
           echo "Repository does not exist, creating..."
           gcloud artifacts repositories create $_REPOSITORY --repository-format=docker --location=$_REGION --project=$_PROJECT_ID
         fi
-  # Create the Bucket for the images
-  # - name: 'gcr.io/cloud-builders/gsutil'
-  #   entrypoint: 'sh'
-  #   args:
-  #     - '-c'
-  #     - |
-  #       if ! gsutil ls gs://$_IMAGES_BUCKET_NAME; then
-  #         echo "Bucket does not exist, creating..."
-  #         gsutil mb -l $_REGION gs://$_IMAGES_BUCKET_NAME
-  #       fi
+
+  # Create the Bucket for the timesheets
+  - name: 'gcr.io/cloud-builders/gsutil'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        if ! gsutil ls gs://$_TIMESHEETS_BUCKET_NAME; then
+          echo "Bucket for timesheets does not exist, creating..."
+          gsutil mb -l $_REGION gs://$_TIMESHEETS_BUCKET_NAME
+        fi
 
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
@@ -70,7 +84,7 @@ steps:
       - '--service-account'
       - 'sa-backend@job-sender-424116.iam.gserviceaccount.com'
       - '--set-env-vars'
-      - 'GOOGLE_CLOUD_PROJECT_ID=$_PROJECT_ID,GOOGLE_CLOUD_PROJECT_NUMBER=$_PROJECT_NUMBER,SECRET_NAME_SERVICE_ACCOUNT_KEY=$_SECRET_NAME_SERVICE_ACCOUNT_KEY,SECRET_NAME_FIREBASE_WEB_API_KEY=$_SECRET_NAME_FIREBASE_WEB_API_KEY,SECRET_NAME_EMAIL_SERVICE_EMAIL=$_SECRET_NAME_EMAIL_SERVICE_EMAIL,SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD=$_SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD, SECRET_NAME_SESSION_COOKIE_STORE=$_SECRET_NAME_SESSION_COOKIE_STORE'
+      - 'GOOGLE_CLOUD_PROJECT_ID=$_PROJECT_ID, GOOGLE_CLOUD_PROJECT_LOCATION_ID=$_REGION, GOOGLE_CLOUD_PROJECT_NUMBER=$_PROJECT_NUMBER,SECRET_NAME_SERVICE_ACCOUNT_KEY=$_SECRET_NAME_SERVICE_ACCOUNT_KEY,SECRET_NAME_FIREBASE_WEB_API_KEY=$_SECRET_NAME_FIREBASE_WEB_API_KEY,SECRET_NAME_EMAIL_SERVICE_EMAIL=$_SECRET_NAME_EMAIL_SERVICE_EMAIL,SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD=$_SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD, SECRET_NAME_SESSION_COOKIE_STORE=$_SECRET_NAME_SESSION_COOKIE_STORE, EMAIL_AGGREGATOR_QUEUE_NAME=$_EMAIL_AGGREGATOR_QUEUE_NAME, TIMESHEETS_BUCKET_NAME=$_TIMESHEETS_BUCKET_NAME'
       
 images:
   - '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPOSITORY/$_IMAGE_NAME:$_IMAGE_TAG'

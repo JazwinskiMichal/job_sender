@@ -26,11 +26,11 @@ func NewSessionManagerService(secretCookieStoreKey []byte) *SessionManagerServic
 }
 
 // CreateSession creates a new session and stores key-value pairs.
-func (s *SessionManagerService) CreateSession(w http.ResponseWriter, r *http.Request, sessionID string, tokenExpirationTimestamp time.Time, data map[string]interface{}) error {
+func (s *SessionManagerService) CreateSession(w http.ResponseWriter, r *http.Request, sessionID string, tokenExpirationTimestamp time.Time, data map[string]interface{}) (*sessions.Session, error) {
 	// Initialize a new session for the user
 	session, err := s.store.Get(r, sessionID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Store the data in the session
@@ -54,10 +54,10 @@ func (s *SessionManagerService) CreateSession(w http.ResponseWriter, r *http.Req
 	// Save the session
 	err = session.Save(r, w)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return session, nil
 }
 
 // DeleteSession deletes a session.
@@ -76,6 +76,16 @@ func (s *SessionManagerService) DeleteSession(w http.ResponseWriter, r *http.Req
 	return nil
 }
 
+// CheckSession checks if a session exists.
+func (s *SessionManagerService) CheckSession(r *http.Request, sessionID string) bool {
+	session, err := s.store.Get(r, sessionID)
+	if err != nil {
+		return false
+	}
+
+	return session.IsNew
+}
+
 // GetElement retrieves an element from a session.
 func (s *SessionManagerService) GetElement(r *http.Request, sessionID string, key string) (interface{}, error) {
 	session, err := s.store.Get(r, sessionID)
@@ -84,4 +94,20 @@ func (s *SessionManagerService) GetElement(r *http.Request, sessionID string, ke
 	}
 
 	return session.Values[key], nil
+}
+
+// SetElement sets an element in a session.
+func (s *SessionManagerService) SetElement(w http.ResponseWriter, r *http.Request, sessionID string, key string, value interface{}) error {
+	session, err := s.store.Get(r, sessionID)
+	if err != nil {
+		return err
+	}
+
+	session.Values[key] = value
+	err = session.Save(r, w)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

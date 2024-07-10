@@ -10,4 +10,6 @@ type Contractor struct {
 	Email    string `firestore:"email"`
 	Phone    string `firestore:"phone"`
 	PhotoURL string `firestore:"photo_url"`
+
+	LastAggregationTimestamp int64 `firestore:"last_aggregation_timestamp"`
 }

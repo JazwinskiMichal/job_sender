@@ -18,19 +18,25 @@ type ContractorsHandler struct {
 	groupsDB      *core.GroupsDatabaseService
 	contractorsDB *core.ContractorsDatabaseService
 	//storageService       *core.StorageService
+	cloudTaskService     *core.CloudTasksService
 	templateService      *core.TemplateService
 	errorReporterService *core.ErrorReporterService
+
+	envVariables *types.EnvVariables
 }
 
 // NewContractorsHandler creates a new ContractorsHandler.
-func NewContractorsHandler(authService *core.AuthService, groupsDB *core.GroupsDatabaseService, contractorsDB *core.ContractorsDatabaseService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService) *ContractorsHandler {
+func NewContractorsHandler(authService *core.AuthService, groupsDB *core.GroupsDatabaseService, contractorsDB *core.ContractorsDatabaseService, cloudTaskService *core.CloudTasksService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService, envVariables *types.EnvVariables) *ContractorsHandler {
 	return &ContractorsHandler{
 		authService:   authService,
 		groupsDB:      groupsDB,
 		contractorsDB: contractorsDB,
 		//storageService:       storageService,
+		cloudTaskService:     cloudTaskService,
 		templateService:      templateService,
 		errorReporterService: errorReporterService,
+
+		envVariables: envVariables,
 	}
 }
 
@@ -39,9 +45,11 @@ func (h *ContractorsHandler) RegisterContractorsHandler(r *mux.Router) {
 	r.Methods("GET").Path("/contractors").HandlerFunc(h.ListContractors)
 	r.Methods("GET").Path("/contractors/add").HandlerFunc(h.ShowAddContractor)
 	r.Methods("GET").Path("/contractors/{ID}").HandlerFunc(h.GetContractor)
+	r.Methods("GET").Path("/contractors/{ID}/timeSheet").HandlerFunc(h.GetContractorsTimeSheet)
 
 	r.Methods("POST").Path("/contractors").HandlerFunc(h.AddContractor)
 	r.Methods("POST").Path("/contractors/{ID}").HandlerFunc(h.EditContractor)
+	r.Methods("POST").Path("/contractors/{ID}/timeSheet").HandlerFunc(h.AddContractorsTimeSheet)
 
 	r.Methods("DELETE").Path("/contractors/{ID}").HandlerFunc(h.DeleteContractor)
 }
@@ -95,11 +103,35 @@ func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Start timeheet aggregation for each contractor
+	for _, contractor := range contractors {
+		taskCreated, err := h.cloudTaskService.CreateTimesheetAggregatorTask(h.envVariables.ProjectID, h.envVariables.ProjectLocationID, h.envVariables.EmailAggregatorQueueName, contractor, types.TimesheetAggregation{
+			GroupID:      groupID,
+			ContractorID: contractor.ID,
+		})
+		if err != nil {
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create timesheet aggregator task: %w", err))
+			continue
+		}
+
+		if !taskCreated {
+			continue
+		}
+
+		// Update the contractor
+		err = h.contractorsDB.UpdateContractor(contractor)
+		if err != nil {
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not update contractor: %w", err))
+			continue
+		}
+	}
+
 	data := map[string]interface{}{
 		"GroupID":     groupID,
 		"Contractors": contractors,
 	}
 
+	// Execute the template
 	listTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsListName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse list template: %w", err))
@@ -193,6 +225,24 @@ func (h *ContractorsHandler) GetContractor(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// GetContractorsTimeSheet gets a contractor's timesheet by ID.
+func (h *ContractorsHandler) GetContractorsTimeSheet(w http.ResponseWriter, r *http.Request) {
+	// Get the contractor ID from the request.
+	id := mux.Vars(r)["ID"]
+	if id == "" {
+		http.Error(w, "ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get the contractor's timesheet.
+	_, err := h.contractorsDB.GetContractorsTimesheet(id)
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, err)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		return
+	}
+}
+
 // AddContractor adds a contractor to a group.
 func (h *ContractorsHandler) AddContractor(w http.ResponseWriter, r *http.Request) {
 	// Get the group ID from the query.
@@ -256,6 +306,11 @@ func (h *ContractorsHandler) EditContractor(w http.ResponseWriter, r *http.Reque
 	}
 
 	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusFound)
+}
+
+// AddContractorsTimeSheet adds a timesheet to a contractor.
+func (h *ContractorsHandler) AddContractorsTimeSheet(w http.ResponseWriter, r *http.Request) {
+	// TODO: implement this
 }
 
 // DeleteContractor deletes a contractor.

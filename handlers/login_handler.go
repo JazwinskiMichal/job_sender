@@ -97,15 +97,15 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 
 	// Create the data
 	data := map[string]interface{}{
-		constants.UserSessionTokenField:     responseBody.IdToken,
-		constants.UserSessionEmailField:     responseBody.Email,
-		constants.UserSessionIsVerfiedField: isVerified,
-		constants.UserSesstionOwnerIdField:  responseBody.LocalId, // TODO: Sprawdzic czy to zawsze jest ta sama wartość dla danego usera
+		constants.SessionTokenField:     responseBody.IdToken,
+		constants.SessionEmailField:     responseBody.Email,
+		constants.SessionIsVerfiedField: isVerified,
+		constants.SesstionOwnerIdField:  responseBody.LocalId, // TODO: Sprawdzic czy to zawsze jest ta sama wartość dla danego usera
 	}
 
 	// Create the session
 	// TODO: czy lepiej tutaj trzymac owner id wgl nie zapisywac do session i doczytywac z bazy jak w mainhandler?
-	err = h.sessionManagerService.CreateSession(w, r, constants.UserSessionName, expirationTimestamp, data)
+	_, err = h.sessionManagerService.CreateSession(w, r, constants.UserSessionName, expirationTimestamp, data)
 	if err != nil {
 		h.showError(w, r, "Could not create session")
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create session: %w", err))
@@ -117,7 +117,16 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 
 // logout logs out the user.
 func (h *LoginHandler) logout(w http.ResponseWriter, r *http.Request) {
+	// Delete the user session
 	err := h.sessionManagerService.DeleteSession(w, r, constants.UserSessionName)
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete session: %w", err))
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		return
+	}
+
+	// Delete the timesheet aggregation session
+	err = h.sessionManagerService.DeleteSession(w, r, constants.TimesheetAggegationSessionName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete session: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)

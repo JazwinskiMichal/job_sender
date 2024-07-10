@@ -10,15 +10,20 @@ require (
 	google.golang.org/api v0.187.0
 )
 
+require github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21 // indirect
+
 require (
 	cloud.google.com/go v0.115.0 // indirect
 	cloud.google.com/go/auth v0.6.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect
+	cloud.google.com/go/cloudtasks v1.12.10
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/firestore v1.15.0
 	cloud.google.com/go/iam v1.1.8 // indirect
 	cloud.google.com/go/longrunning v0.5.7 // indirect
-	cloud.google.com/go/storage v1.41.0 // indirect
+	cloud.google.com/go/storage v1.41.0
+	github.com/emersion/go-imap v1.2.1
+	github.com/emersion/go-message v0.18.1
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

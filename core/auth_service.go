@@ -96,7 +96,7 @@ func (s *AuthService) Login(email string, password string) (*types.LoginResponse
 
 // CheckUser returns the user info
 func (s *AuthService) CheckUser(r *http.Request) (*types.LoggedUserInfo, error) {
-	email, err := s.sessionManagerService.GetElement(r, constants.UserSessionName, constants.UserSessionEmailField)
+	email, err := s.sessionManagerService.GetElement(r, constants.UserSessionName, constants.SessionEmailField)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (s *AuthService) CheckUser(r *http.Request) (*types.LoggedUserInfo, error) 
 
 // CheckIsLoggedIn checks if a user is logged in.
 func (s *AuthService) checkIsLoggedIn(r *http.Request) (bool, error) {
-	idToken, err := s.sessionManagerService.GetElement(r, constants.UserSessionName, constants.UserSessionTokenField)
+	idToken, err := s.sessionManagerService.GetElement(r, constants.UserSessionName, constants.SessionTokenField)
 	if err != nil {
 		return false, err
 	}
@@ -160,7 +160,7 @@ func (s *AuthService) checkIsLoggedIn(r *http.Request) (bool, error) {
 		return false, err
 	}
 
-	if claims[constants.UserSessionEmailField] == nil {
+	if claims[constants.SessionEmailField] == nil {
 		return false, nil
 	}
 

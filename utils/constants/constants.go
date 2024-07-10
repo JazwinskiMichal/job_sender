@@ -2,8 +2,10 @@ package utils
 
 const (
 	AppName = "job-sender"
+	AppUrl  = "https://app.jobsender.pl"
 
 	SmtpGmailAddress = "smtp.gmail.com"
+	ImapGmailAddress = "imap.gmail.com"
 	SmtpGmailPort    = 587
 
 	TemplatesDir                = "/templates"
@@ -21,9 +23,14 @@ const (
 
 	TemplateOwnerEditName = "edit_owner.html"
 
-	UserSessionName           = "user-session"
-	UserSessionEmailField     = "email"
-	UserSessionTokenField     = "token"
-	UserSessionIsVerfiedField = "isVerified"
-	UserSesstionOwnerIdField  = "ownerID"
+	UserSessionName                = "user-session"
+	TimesheetAggegationSessionName = "timesheet-aggregation-session"
+
+	SessionEmailField     = "email"
+	SessionTokenField     = "token"
+	SessionIsVerfiedField = "isVerified"
+	SesstionOwnerIdField  = "ownerID"
+
+	SessionAggregatorIDField        = "aggregatorID"
+	SessionLastAggregationTimeField = "lastAggregationTime"
 )

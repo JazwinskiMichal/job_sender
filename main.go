@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// Create new EnvVariablesService
-	envVariablesService := core.NewEnvVariablesService("PORT", "GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_PROJECT_NUMBER", "SECRET_NAME_SERVICE_ACCOUNT_KEY", "SECRET_NAME_FIREBASE_WEB_API_KEY", "SECRET_NAME_EMAIL_SERVICE_EMAIL", "SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD", "SECRET_NAME_SESSION_COOKIE_STORE")
+	envVariablesService := core.NewEnvVariablesService("PORT", "GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_PROJECT_LOCATION_ID", "GOOGLE_CLOUD_PROJECT_NUMBER", "SECRET_NAME_SERVICE_ACCOUNT_KEY", "SECRET_NAME_FIREBASE_WEB_API_KEY", "SECRET_NAME_EMAIL_SERVICE_EMAIL", "SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD", "SECRET_NAME_SESSION_COOKIE_STORE", "EMAIL_AGGREGATOR_QUEUE_NAME", "TIMESHEETS_BUCKET_NAME")
 	envVariables := envVariablesService.GetEnvVariables()
 
 	// Create a new Secret Manager client
@@ -72,9 +72,18 @@ func main() {
 	// Initialize Sesssion Manager Service
 	sessionManagerService := core.NewSessionManagerService(sessionCookieStore)
 
+	// Initialize the Cloud Tasks service
+	cloudTasksService := core.NewCloudTasksService(envVariablesService)
+
 	// Initialize the Auth service
 	authService := core.NewAuthService(firebaseService, string(firebaseWebApiKey), sessionManagerService)
 	authMiddleware := middlewares.NewAuthMiddleware(authService, errorReporterService)
+
+	// Create Storage Service
+	storageService, err := core.NewStorageService(envVariables.TimesheetsBucketName)
+	if err != nil {
+		log.Fatalf("NewStorageService: %v", err)
+	}
 
 	// Create owners db service
 	ownersDB, err := core.NewOwnerDatabaseService(firebaseService)
@@ -117,6 +126,12 @@ func main() {
 		log.Fatalf("NewContractorsDatabaseService: %v", err)
 	}
 
+	// Create timesheets db service
+	timesheetsDB, err := core.NewTimesheetsDatabaseService(firebaseService)
+	if err != nil {
+		log.Fatalf("NewTimesheetsDatabaseService: %v", err)
+	}
+
 	// Create owners handler
 	ownersHandler := handlers.NewOwnersHandler(authService, ownersDB, sessionManagerService, templateService, errorReporterService)
 	ownersHandler.RegisterOwnersHandlers(authRouter)
@@ -126,8 +141,12 @@ func main() {
 	groupsHandler.RegisterGroupsHandlers(authRouter)
 
 	// Create contractor handler
-	contractorsHandler := handlers.NewContractorsHandler(authService, groupsDB, contractorsDB, templateService, errorReporterService)
+	contractorsHandler := handlers.NewContractorsHandler(authService, groupsDB, contractorsDB, cloudTasksService, templateService, errorReporterService, envVariables)
 	contractorsHandler.RegisterContractorsHandler(authRouter)
+
+	// Create timesheets handler
+	timesheetsHandler := handlers.NewTimesheetsHandler(emailService, timesheetsDB, storageService, errorReporterService)
+	timesheetsHandler.RegisterTimesheetsHandlers(router)
 
 	// Start the server
 	if err := http.ListenAndServe(":"+envVariables.Port, router); err != nil {

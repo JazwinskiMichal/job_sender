@@ -134,7 +134,7 @@ func (h *OwnersHandler) EditOwner(w http.ResponseWriter, r *http.Request) {
 // AddOwner adds an owner.
 func (h *OwnersHandler) AddOwner(w http.ResponseWriter, r *http.Request) {
 	// Get the owner id from session.
-	ownerID, err := h.sessionManagerService.GetElement(r, constants.UserSessionName, constants.UserSesstionOwnerIdField)
+	ownerID, err := h.sessionManagerService.GetElement(r, constants.UserSessionName, constants.SesstionOwnerIdField)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner id from session: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)

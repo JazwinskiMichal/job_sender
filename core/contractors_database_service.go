@@ -14,8 +14,9 @@ import (
 )
 
 type ContractorsDatabaseService struct {
-	collectionName string
-	client         *firestore.Client
+	contractorsCollectionName string
+	timesheetsCollectionName  string
+	client                    *firestore.Client
 }
 
 // Ensure ContractorsDatabaseService implements IContractorsDatabaseService.
@@ -38,8 +39,8 @@ func NewContractorsDatabaseService(firebaseService *FirebaseService) (*Contracto
 	}
 
 	return &ContractorsDatabaseService{
-		collectionName: "contractors",
-		client:         client,
+		contractorsCollectionName: "contractors",
+		client:                    client,
 	}, nil
 }
 
@@ -51,7 +52,7 @@ func (db *ContractorsDatabaseService) Close(context.Context) error {
 // ListContractors lists all contractors for a group.
 func (db *ContractorsDatabaseService) ListContractors(groupID string) ([]*types.Contractor, error) {
 	ctx := context.Background()
-	iter := db.client.Collection(db.collectionName).Where("group_id", "==", groupID).Documents(ctx)
+	iter := db.client.Collection(db.contractorsCollectionName).Where("group_id", "==", groupID).Documents(ctx)
 
 	var contractors []*types.Contractor
 	for {
@@ -77,7 +78,7 @@ func (db *ContractorsDatabaseService) ListContractors(groupID string) ([]*types.
 // GetContractor gets a contractor by ID.
 func (db *ContractorsDatabaseService) GetContractor(id string) (*types.Contractor, error) {
 	ctx := context.Background()
-	doc, err := db.client.Collection(db.collectionName).Doc(id).Get(ctx)
+	doc, err := db.client.Collection(db.contractorsCollectionName).Doc(id).Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("firestoredb: could not get contractor: %w", err)
 	}
@@ -90,12 +91,28 @@ func (db *ContractorsDatabaseService) GetContractor(id string) (*types.Contracto
 	return contractor, nil
 }
 
+// GetContractorsTimesheet gets a contractor's timesheet by ID.
+func (db *ContractorsDatabaseService) GetContractorsTimesheet(id string) (*types.Timesheet, error) {
+	ctx := context.Background()
+	doc, err := db.client.Collection(db.contractorsCollectionName).Doc(id).Collection(db.timesheetsCollectionName).Doc(id).Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("firestoredb: could not get timesheet: %w", err)
+	}
+
+	timesheet := &types.Timesheet{}
+	if err := doc.DataTo(timesheet); err != nil {
+		return nil, fmt.Errorf("firestoredb: could not convert data to timesheet: %w", err)
+	}
+
+	return timesheet, nil
+}
+
 // AddContractor adds a contractor to a group.
 func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *types.Contractor) error {
 	ctx := context.Background()
 
 	// Check if contractor already exists.
-	iter := db.client.Collection(db.collectionName).Where("email", "==", contractor.Email).Documents(ctx)
+	iter := db.client.Collection(db.contractorsCollectionName).Where("email", "==", contractor.Email).Documents(ctx)
 	for {
 		_, err := iter.Next()
 		if err == iterator.Done {
@@ -112,7 +129,7 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 		}
 	}
 
-	ref := db.client.Collection(db.collectionName).NewDoc()
+	ref := db.client.Collection(db.contractorsCollectionName).NewDoc()
 	contractorMap := map[string]interface{}{
 		"id":        ref.ID,
 		"group_id":  groupID,
@@ -131,17 +148,55 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 	return nil
 }
 
+// AddContractorsTimesheet adds a timesheet to a contractor.
+func (db *ContractorsDatabaseService) AddContractorsTimesheet(groupID string, contractorID string, timesheet *types.Timesheet) error {
+	ctx := context.Background()
+
+	// Check if timesheet already exists.
+	iter := db.client.Collection(db.contractorsCollectionName).Doc(contractorID).Collection(db.timesheetsCollectionName).Documents(ctx)
+	for {
+		_, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("firestoredb: could not check if timesheet exists: %w", err)
+		}
+
+		if status.Code(err) == codes.AlreadyExists {
+			return fmt.Errorf("firestoredb: timesheet already exists")
+		} else {
+			return fmt.Errorf("firestoredb: could not check if timesheet exists: %w", err)
+		}
+	}
+
+	ref := db.client.Collection(db.contractorsCollectionName).Doc(contractorID).Collection(db.timesheetsCollectionName).NewDoc()
+	timesheetMap := map[string]interface{}{
+		"id":            ref.ID,
+		"contractor_id": contractorID,
+		"group_id":      groupID, // TODO: also maybe store the timesheet in the storage and delete from mail? then here also timesheet url
+	}
+
+	_, err := ref.Create(ctx, timesheetMap)
+	if err != nil {
+		return fmt.Errorf("firestoredb: could not add timesheet: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateContractor updates a contractor.
 func (db *ContractorsDatabaseService) UpdateContractor(contractor *types.Contractor) error {
 	ctx := context.Background()
-	_, err := db.client.Collection(db.collectionName).Doc(contractor.ID).Set(ctx, map[string]interface{}{
-		"id":        contractor.ID,
-		"group_id":  contractor.GroupID,
-		"name":      contractor.Name,
-		"surname":   contractor.Surname,
-		"email":     contractor.Email,
-		"phone":     contractor.Phone,
-		"photo_url": contractor.PhotoURL,
+	_, err := db.client.Collection(db.contractorsCollectionName).Doc(contractor.ID).Set(ctx, map[string]interface{}{
+		"id":                         contractor.ID,
+		"group_id":                   contractor.GroupID,
+		"name":                       contractor.Name,
+		"surname":                    contractor.Surname,
+		"email":                      contractor.Email,
+		"phone":                      contractor.Phone,
+		"photo_url":                  contractor.PhotoURL,
+		"last_aggregation_timestamp": contractor.LastAggregationTimestamp,
 	})
 	if err != nil {
 		return fmt.Errorf("firestoredb: could not update contractor: %w", err)
@@ -153,7 +208,7 @@ func (db *ContractorsDatabaseService) UpdateContractor(contractor *types.Contrac
 // DeleteContractor deletes a contractor.
 func (db *ContractorsDatabaseService) DeleteContractor(id string) error {
 	ctx := context.Background()
-	_, err := db.client.Collection(db.collectionName).Doc(id).Delete(ctx)
+	_, err := db.client.Collection(db.contractorsCollectionName).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("firestoredb: could not delete contractor: %w", err)
 	}
