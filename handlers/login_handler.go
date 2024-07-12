@@ -100,7 +100,7 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 		constants.SessionTokenField:     responseBody.IdToken,
 		constants.SessionEmailField:     responseBody.Email,
 		constants.SessionIsVerfiedField: isVerified,
-		constants.SesstionOwnerIdField:  responseBody.LocalId, // TODO: Sprawdzic czy to zawsze jest ta sama wartość dla danego usera
+		constants.SesstionOwnerIdField:  responseBody.LocalId,
 	}
 
 	// Create the session

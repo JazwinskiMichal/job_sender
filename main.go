@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// Create new EnvVariablesService
-	envVariablesService := core.NewEnvVariablesService("PORT", "GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_PROJECT_LOCATION_ID", "GOOGLE_CLOUD_PROJECT_NUMBER", "SECRET_NAME_SERVICE_ACCOUNT_KEY", "SECRET_NAME_FIREBASE_WEB_API_KEY", "SECRET_NAME_EMAIL_SERVICE_EMAIL", "SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD", "SECRET_NAME_SESSION_COOKIE_STORE", "EMAIL_AGGREGATOR_QUEUE_NAME", "TIMESHEETS_BUCKET_NAME")
+	envVariablesService := core.NewEnvVariablesService("PORT", "GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_PROJECT_LOCATION_ID", "GOOGLE_CLOUD_PROJECT_NUMBER", "SERVICE_ACCOUNT_EMAIL", "SECRET_NAME_SERVICE_ACCOUNT_KEY", "SECRET_NAME_FIREBASE_WEB_API_KEY", "SECRET_NAME_EMAIL_SERVICE_EMAIL", "SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD", "SECRET_NAME_SESSION_COOKIE_STORE", "EMAIL_AGGREGATOR_QUEUE_NAME", "TIMESHEETS_BUCKET_NAME")
 	envVariables := envVariablesService.GetEnvVariables()
 
 	// Create a new Secret Manager client
@@ -72,8 +72,11 @@ func main() {
 	// Initialize Sesssion Manager Service
 	sessionManagerService := core.NewSessionManagerService(sessionCookieStore)
 
-	// Initialize the Cloud Tasks service
+	// Initialize Cloud Tasks service
 	cloudTasksService := core.NewCloudTasksService(envVariablesService)
+
+	// Initialize Cloud Scheduler Service
+	schedulerService, err := core.NewSchedulerService(envVariables.ServiceAccountEmail, envVariables.ProjectID, envVariables.ProjectLocationID, secretServiceAccountKey)
 
 	// Initialize the Auth service
 	authService := core.NewAuthService(firebaseService, string(firebaseWebApiKey), sessionManagerService)
@@ -137,7 +140,7 @@ func main() {
 	ownersHandler.RegisterOwnersHandlers(authRouter)
 
 	// Create groups handler
-	groupsHandler := handlers.NewGroupsHandler(authService, ownersDB, groupsDB, sessionManagerService, templateService, errorReporterService)
+	groupsHandler := handlers.NewGroupsHandler(authService, ownersDB, groupsDB, schedulerService, sessionManagerService, templateService, errorReporterService)
 	groupsHandler.RegisterGroupsHandlers(authRouter)
 
 	// Create contractor handler
@@ -145,7 +148,7 @@ func main() {
 	contractorsHandler.RegisterContractorsHandler(authRouter)
 
 	// Create timesheets handler
-	timesheetsHandler := handlers.NewTimesheetsHandler(emailService, timesheetsDB, storageService, errorReporterService)
+	timesheetsHandler := handlers.NewTimesheetsHandler(emailService, contractorsDB, timesheetsDB, storageService, errorReporterService)
 	timesheetsHandler.RegisterTimesheetsHandlers(router)
 
 	// Start the server
@@ -153,3 +156,5 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// TODO: dać możliwość na liście kontraktowców do ręcznego wyzwolenia timesheet request

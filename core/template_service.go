@@ -44,6 +44,8 @@ func (s *TemplateService) ExecuteTemplate(tmpl *types.AppTemplate, w http.Respon
 	// Check if userInfo is nil and handle accordingly
 	if userInfo == nil {
 		userInfo = &types.LoggedUserInfo{
+			GroupID:    "",
+			GroupName:  "",
 			Email:      "",
 			IsLoggedIn: false,
 			IsVerified: false,
@@ -52,11 +54,15 @@ func (s *TemplateService) ExecuteTemplate(tmpl *types.AppTemplate, w http.Respon
 
 	d := struct {
 		Data       interface{}
+		GroupID    string
+		GroupName  string
 		Email      string
 		IsLoggedIn bool
 		IsVerified bool
 	}{
 		Data:       data,
+		GroupID:    userInfo.GroupID,
+		GroupName:  userInfo.GroupName,
 		Email:      userInfo.Email,
 		IsLoggedIn: userInfo.IsLoggedIn,
 		IsVerified: userInfo.IsVerified,

@@ -11,6 +11,9 @@
         <div class="container-fluid">
             <div class="navbar-header">
                 <a class="navbar-brand" href="/main">Job sender</a>
+                {{if .GroupName}} 
+                <a class="navbar-text" href="/auth/groups/{{.GroupID}}/edit">Group: <strong>{{.GroupName}}</strong></a>
+                {{end}}
             </div>
             {{if .IsLoggedIn}}
             <div class="navbar-right">

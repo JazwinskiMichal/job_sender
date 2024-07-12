@@ -14,6 +14,8 @@ type EnvVariablesService struct {
 	projectLocationKey string
 	projectNumberKey   string
 
+	serviceAccountEmailKey string
+
 	secretNameServiceAccountKey          string
 	secretNameFirestoreWebApiKey         string
 	secretNameEmailServiceEmailKey       string
@@ -28,7 +30,9 @@ type EnvVariablesService struct {
 // Ensure EnvVariablesService implements IEnvVariablesService.
 var _ interfaces.IEnvVariablesService = &EnvVariablesService{}
 
-func NewEnvVariablesService(portKey string, projectIDKey string, projectLocationIDKey string, projectNumberKey string,
+func NewEnvVariablesService(portKey string,
+	projectIDKey string, projectLocationIDKey string, projectNumberKey string,
+	serviceAccountEmailKey string,
 	secretNameServiceAccountKey string, secretNameFirestoreWebApiKey string, secretNameEmailServiceEmailKey string, secretNameEmailServiceAppPasswordKey string, secretNameSessionCookieStoreKey string,
 	emailAggregatorQueueNameKey string,
 	timesheetsBucketNameKey string) *EnvVariablesService {
@@ -39,6 +43,8 @@ func NewEnvVariablesService(portKey string, projectIDKey string, projectLocation
 		projectIDKey:       projectIDKey,
 		projectLocationKey: projectLocationIDKey,
 		projectNumberKey:   projectNumberKey,
+
+		serviceAccountEmailKey: serviceAccountEmailKey,
 
 		secretNameServiceAccountKey:          secretNameServiceAccountKey,
 		secretNameFirestoreWebApiKey:         secretNameFirestoreWebApiKey,
@@ -71,6 +77,11 @@ func (e *EnvVariablesService) GetEnvVariables() *types.EnvVariables {
 
 	projectNumber := os.Getenv(e.projectNumberKey)
 	if projectNumber == "" {
+		log.Fatal("GOOGLE_CLOUD_PROJECT_NUMBER must be set")
+	}
+
+	serviceAccountEmail := os.Getenv(e.serviceAccountEmailKey)
+	if serviceAccountEmail == "" {
 		log.Fatal("GOOGLE_CLOUD_PROJECT_NUMBER must be set")
 	}
 
@@ -115,6 +126,8 @@ func (e *EnvVariablesService) GetEnvVariables() *types.EnvVariables {
 		ProjectID:         projectID,
 		ProjectLocationID: projectLocationID,
 		ProjectNumber:     projectNumber,
+
+		ServiceAccountEmail: serviceAccountEmail,
 
 		SecretNameServiceAccountKey:       secretNameServiceAccountKey,
 		SecretNameFirestoreWebApiKey:      secretNameFirestoreWebApiKey,

@@ -20,7 +20,7 @@ type EmailService struct {
 	appPassword string
 }
 
-// EnsureEmailService implements the IEmailService interface.
+// Ensure EmailService implements the IEmailService interface.
 var _ interfaces.IEmailService = &EmailService{}
 
 func NewEmailService(email string, appPassword string) *EmailService {
@@ -41,6 +41,24 @@ func (h *EmailService) SendVerificationEmail(to string, link string) error {
 
 	// Gmail SMTP server requires TLS connection on port 587
 	err := smtp.SendMail(fmt.Sprintf("%s:%s", constants.SmtpGmailAddress, strconv.Itoa(constants.SmtpGmailPort)), auth, h.email, []string{to}, []byte(msg))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SendTimesheetRequestEmail sends a timesheet request email to the contractor.
+func (h *EmailService) SendTimesheetRequestEmail(contractorEmail string, contractorID string, weekID string) error {
+	subject := fmt.Sprintf("[Contractor ID: %s] Timesheet %s", contractorID, weekID)
+	body := "Please submit your timesheet. You can submit it by replying to this email with the timesheet attached."
+	msg := fmt.Sprintf("From: %s\nTo: %s\nSubject: %s\n\n%s", h.email, contractorEmail, subject, body)
+
+	// Use smtp.PlainAuth with the app password
+	auth := smtp.PlainAuth("", h.email, h.appPassword, constants.SmtpGmailAddress)
+
+	// Gmail SMTP server requires TLS connection on port 587
+	err := smtp.SendMail(fmt.Sprintf("%s:%s", constants.SmtpGmailAddress, strconv.Itoa(constants.SmtpGmailPort)), auth, h.email, []string{contractorEmail}, []byte(msg))
 	if err != nil {
 		return err
 	}

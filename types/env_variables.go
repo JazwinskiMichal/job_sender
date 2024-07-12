@@ -7,6 +7,8 @@ type EnvVariables struct {
 	ProjectLocationID string
 	ProjectNumber     string
 
+	ServiceAccountEmail string
+
 	SecretNameServiceAccountKey       string
 	SecretNameFirestoreWebApiKey      string
 	SecretNameEmailServiceEmail       string

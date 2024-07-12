@@ -18,9 +18,6 @@ type IContractorsDatabaseService interface {
 	// AddContractor adds a contractor to a group.
 	AddContractor(groupID string, contractor *types.Contractor) error
 
-	// AddContractorsTimesheet adds a timesheet to a contractor.
-	AddContractorsTimesheet(groupID string, contractorID string, timesheet *types.Timesheet) error
-
 	// UpdateContractor updates a contractor.
 	UpdateContractor(contractor *types.Contractor) error
 

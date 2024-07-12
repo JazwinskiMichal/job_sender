@@ -70,7 +70,7 @@ func (s *CloudTasksService) CreateTimesheetAggregatorTask(projectID string, loca
 			MessageType: &taskspb.Task_HttpRequest{
 				HttpRequest: &taskspb.HttpRequest{
 					HttpMethod: taskspb.HttpMethod_POST,
-					Url:        constants.AppUrl + "/timesheets/aggregator",
+					Url:        constants.AppUrl + "/timesheets/aggregate",
 				},
 			},
 		},

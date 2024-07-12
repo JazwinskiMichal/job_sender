@@ -10,7 +10,7 @@
     <img src="{{if .PhotoURL}}{{.PhotoURL}}{{else}}https://picsum.photos/id/237/200/200{{end}}" style="border-radius: 50%; width: 128px; height: 128px; object-fit: cover;">
   </div>
   <div class="media-body">
-    <h4><a href="/auth/contractors/{{.ID}}">{{.Name}} {{.Surname}}</a></h4>
+    <h4><a href="/auth/contractors/{{.ID}}/edit">{{.Name}} {{.Surname}}</a></h4>
     <p>{{.Email}}</p>
     <p>{{.Phone}}</p>
   </div>

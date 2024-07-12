@@ -17,17 +17,19 @@ type GroupsHandler struct {
 	authService           *core.AuthService
 	ownersDB              *core.OwnerDatabaseService
 	groupsDB              *core.GroupsDatabaseService
+	schedulerService      *core.SchedulerService
 	sessionManagerService *core.SessionManagerService
 	templateService       *core.TemplateService
 	errorReporterService  *core.ErrorReporterService
 }
 
 // NewGroupsHandler creates a new GroupsHandler.
-func NewGroupsHandler(authService *core.AuthService, ownersDB *core.OwnerDatabaseService, groupsDB *core.GroupsDatabaseService, sessionManagerService *core.SessionManagerService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService) *GroupsHandler {
+func NewGroupsHandler(authService *core.AuthService, ownersDB *core.OwnerDatabaseService, groupsDB *core.GroupsDatabaseService, schedulerService *core.SchedulerService, sessionManagerService *core.SessionManagerService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService) *GroupsHandler {
 	return &GroupsHandler{
 		authService:           authService,
 		ownersDB:              ownersDB,
 		groupsDB:              groupsDB,
+		schedulerService:      schedulerService,
 		sessionManagerService: sessionManagerService,
 		templateService:       templateService,
 		errorReporterService:  errorReporterService,
@@ -38,12 +40,11 @@ func NewGroupsHandler(authService *core.AuthService, ownersDB *core.OwnerDatabas
 func (h *GroupsHandler) RegisterGroupsHandlers(r *mux.Router) {
 	r.Methods("GET").Path("/groups/add").HandlerFunc(h.ShowAddGroup)
 	r.Methods("GET").Path("/groups/{ID}").HandlerFunc(h.GetGroup)
-	r.Methods("GET").Path("/groups/{ID}/edit").HandlerFunc(h.EditGroup)
+	r.Methods("GET").Path("/groups/{ID}/edit").HandlerFunc(h.ShowEditGroup)
+	r.Methods("GET").Path("/groups/{ID}/delete").HandlerFunc(h.DeleteGroup)
 
 	r.Methods("POST").Path("/groups").HandlerFunc(h.AddGroup)
-	r.Methods("PUT").Path("/groups/{ID}").HandlerFunc(h.UpdateGroup)
-
-	r.Methods("DELETE").Path("/groups/{ID}").HandlerFunc(h.DeleteGroup)
+	r.Methods("PUT").Path("/groups/{ID}").HandlerFunc(h.UpdateGroup) // TODO: remove all PUT methods, as templates are not using them
 }
 
 // ShowAddGroup displays the add group page.
@@ -93,7 +94,7 @@ func (h *GroupsHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 // EditGroup edits a group.
-func (h *GroupsHandler) EditGroup(w http.ResponseWriter, r *http.Request) {
+func (h *GroupsHandler) ShowEditGroup(w http.ResponseWriter, r *http.Request) {
 	groupID := mux.Vars(r)["ID"]
 	if groupID == "" {
 		http.Error(w, "groupID is required", http.StatusBadRequest)
@@ -113,6 +114,10 @@ func (h *GroupsHandler) EditGroup(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
 		return
 	}
+
+	// Add group info to the user info.
+	userInfo.GroupID = group.ID
+	userInfo.GroupName = group.Name
 
 	groupTmpl, err := h.templateService.ParseTemplate(constants.TemplateGroupEditName)
 	if err != nil {
@@ -181,6 +186,14 @@ func (h *GroupsHandler) AddGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create the timesheet request schedule job for the group.
+	err = h.schedulerService.CreateTimesheetRequestJob(group.ID, "0 17 * * SUN") // TODO: create a way to input the schedule
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create timesheet request job: %w", err))
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		return
+	}
+
 	http.Redirect(w, r, "/auth/contractors?groupID="+group.ID, http.StatusFound)
 }
 
@@ -205,6 +218,7 @@ func (h *GroupsHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/auth/contractors", http.StatusFound) // TODO: group id is needed
 }
 
+// TODO: Kiedy usuwać grupę czy właściciela, to chyba trzeba tez usuwac timesheety
 // DeleteGroup deletes a group.
 func (h *GroupsHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	groupID := mux.Vars(r)["ID"]
@@ -220,7 +234,15 @@ func (h *GroupsHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound) // TODO: group id is needed
+	// Delete the timsheet request schedule jobs for the group.
+	err = h.schedulerService.DeleteTimesheetRequestJob(groupID)
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete timesheet request job: %w", err))
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, "/auth/groups/add", http.StatusFound)
 }
 
 // groupFromForm creates a group from a form.

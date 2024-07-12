@@ -91,6 +91,7 @@ func (db *ContractorsDatabaseService) GetContractor(id string) (*types.Contracto
 	return contractor, nil
 }
 
+// TODO: sprawdzić, bo aktualnie nieużwyane
 // GetContractorsTimesheet gets a contractor's timesheet by ID.
 func (db *ContractorsDatabaseService) GetContractorsTimesheet(id string) (*types.Timesheet, error) {
 	ctx := context.Background()
@@ -143,43 +144,6 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 	_, err := ref.Create(ctx, contractorMap)
 	if err != nil {
 		return fmt.Errorf("firestoredb: could not add contractor: %w", err)
-	}
-
-	return nil
-}
-
-// AddContractorsTimesheet adds a timesheet to a contractor.
-func (db *ContractorsDatabaseService) AddContractorsTimesheet(groupID string, contractorID string, timesheet *types.Timesheet) error {
-	ctx := context.Background()
-
-	// Check if timesheet already exists.
-	iter := db.client.Collection(db.contractorsCollectionName).Doc(contractorID).Collection(db.timesheetsCollectionName).Documents(ctx)
-	for {
-		_, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("firestoredb: could not check if timesheet exists: %w", err)
-		}
-
-		if status.Code(err) == codes.AlreadyExists {
-			return fmt.Errorf("firestoredb: timesheet already exists")
-		} else {
-			return fmt.Errorf("firestoredb: could not check if timesheet exists: %w", err)
-		}
-	}
-
-	ref := db.client.Collection(db.contractorsCollectionName).Doc(contractorID).Collection(db.timesheetsCollectionName).NewDoc()
-	timesheetMap := map[string]interface{}{
-		"id":            ref.ID,
-		"contractor_id": contractorID,
-		"group_id":      groupID, // TODO: also maybe store the timesheet in the storage and delete from mail? then here also timesheet url
-	}
-
-	_, err := ref.Create(ctx, timesheetMap)
-	if err != nil {
-		return fmt.Errorf("firestoredb: could not add timesheet: %w", err)
 	}
 
 	return nil

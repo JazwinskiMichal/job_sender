@@ -115,10 +115,42 @@ func (db *GroupsDatabaseService) UpdateGroup(group *types.Group) error {
 	return nil
 }
 
-// DeleteGroup deletes a group.
+// DeleteGroup deletes a group and all contractors.
 func (db *GroupsDatabaseService) DeleteGroup(id string) error {
 	ctx := context.Background()
-	_, err := db.client.Collection(db.collectionName).Doc(id).Delete(ctx)
+
+	// Get the group.
+	doc, err := db.client.Collection(db.collectionName).Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return status.Errorf(codes.NotFound, "group with ID %s does not exist", id)
+		}
+		return fmt.Errorf("could not get group: %w", err)
+	}
+
+	var group types.Group
+	err = doc.DataTo(&group)
+	if err != nil {
+		return fmt.Errorf("could not convert group data: %w", err)
+	}
+
+	// Delete all contractors in the group.
+	contractors, err := db.client.Collection("contractors").Where("group_id", "==", group.ID).Documents(ctx).GetAll()
+	if err != nil {
+		return fmt.Errorf("could not get contractors: %w", err)
+	}
+
+	for _, contractor := range contractors {
+		contractorID := contractor.Ref.ID
+
+		_, err := db.client.Collection("contractors").Doc(contractorID).Delete(ctx)
+		if err != nil {
+			return fmt.Errorf("could not delete contractor: %w", err)
+		}
+	}
+
+	// Delete the group.
+	_, err = db.client.Collection(db.collectionName).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("could not delete group: %w", err)
 	}
