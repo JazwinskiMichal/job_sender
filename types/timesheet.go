@@ -2,9 +2,9 @@ package types
 
 // Timesheet represents a contractor's timesheet.
 type Timesheet struct {
-	ID           string `json:"id"`
-	ContractorID string `json:"contractor_id"`
-	GroupID      string `json:"group_id"`
+	ID           string `firestore:"id"`
+	ContractorID string `firestore:"contractor_id"`
+	RequestID    string `firestore:"request_id"`
 
-	StorageURL string `json:"storage_url"`
+	StorageURL string `firestore:"storage_url"`
 }

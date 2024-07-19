@@ -32,6 +32,7 @@ func NewLoginHandler(authService *core.AuthService, firebaseService *core.Fireba
 
 func (h *LoginHandler) RegisterLoginHandlers(r *mux.Router) {
 	r.Methods("GET").Path("/login").Handler(http.HandlerFunc(h.showLogin))
+
 	r.Methods("POST").Path("/login").Handler(http.HandlerFunc(h.login))
 	r.Methods("POST").Path("/logout").Handler(http.HandlerFunc(h.logout))
 }
@@ -41,14 +42,14 @@ func (h *LoginHandler) showLogin(w http.ResponseWriter, r *http.Request) {
 	loginTmpl, err := h.templateService.ParseTemplate(constants.TemplateLoginName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse login template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	err = h.templateService.ExecuteTemplate(loginTmpl, w, r, nil, nil)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 }
@@ -112,7 +113,7 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, fmt.Sprintf("/auth/owners/%s", responseBody.LocalId), http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/auth/owners/%s", responseBody.LocalId), http.StatusSeeOther)
 }
 
 // logout logs out the user.
@@ -121,7 +122,7 @@ func (h *LoginHandler) logout(w http.ResponseWriter, r *http.Request) {
 	err := h.sessionManagerService.DeleteSession(w, r, constants.UserSessionName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete session: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -129,11 +130,11 @@ func (h *LoginHandler) logout(w http.ResponseWriter, r *http.Request) {
 	err = h.sessionManagerService.DeleteSession(w, r, constants.TimesheetAggegationSessionName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete session: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/main", http.StatusFound)
+	http.Redirect(w, r, "/main", http.StatusSeeOther)
 }
 
 // showError renders the login page with an error message.

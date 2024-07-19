@@ -49,16 +49,16 @@ func (h *EmailService) SendVerificationEmail(to string, link string) error {
 }
 
 // SendTimesheetRequestEmail sends a timesheet request email to the contractor.
-func (h *EmailService) SendTimesheetRequestEmail(contractorEmail string, contractorID string, weekID string) error {
-	subject := fmt.Sprintf("[Contractor ID: %s] Timesheet %s", contractorID, weekID)
-	body := "Please submit your timesheet. You can submit it by replying to this email with the timesheet attached."
-	msg := fmt.Sprintf("From: %s\nTo: %s\nSubject: %s\n\n%s", h.email, contractorEmail, subject, body)
+func (h *EmailService) SendTimesheetRequestEmail(contractor *types.Contractor, requestID string) error {
+	subject := fmt.Sprintf("Timesheet %s [%s]", requestID, contractor.ID)
+	body := fmt.Sprintf("Hi %s %s. Please submit your timesheet. You can submit it by replying to this email with the timesheet attached.", contractor.Name, contractor.Surname)
+	msg := fmt.Sprintf("From: %s\nTo: %s\nSubject: %s\n\n%s", h.email, contractor.Email, subject, body)
 
 	// Use smtp.PlainAuth with the app password
 	auth := smtp.PlainAuth("", h.email, h.appPassword, constants.SmtpGmailAddress)
 
 	// Gmail SMTP server requires TLS connection on port 587
-	err := smtp.SendMail(fmt.Sprintf("%s:%s", constants.SmtpGmailAddress, strconv.Itoa(constants.SmtpGmailPort)), auth, h.email, []string{contractorEmail}, []byte(msg))
+	err := smtp.SendMail(fmt.Sprintf("%s:%s", constants.SmtpGmailAddress, strconv.Itoa(constants.SmtpGmailPort)), auth, h.email, []string{contractor.Email}, []byte(msg))
 	if err != nil {
 		return err
 	}
@@ -90,9 +90,15 @@ func (h *EmailService) GetEmailAttachments(subject string) ([]types.Attachment, 
 	// Search for emails with the specified subject
 	criteria := imap.NewSearchCriteria()
 	criteria.Header.Add("Subject", subject)
+	criteria.WithoutFlags = []string{"\\Seen"} // Exclude emails that are marked as Seen
 	uids, err := c.Search(criteria)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search emails: %w", err)
+	}
+
+	// Nothing to process
+	if len(uids) == 0 {
+		return []types.Attachment{}, nil
 	}
 
 	// Fetch the emails

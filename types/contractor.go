@@ -11,5 +11,11 @@ type Contractor struct {
 	Phone    string `firestore:"phone"`
 	PhotoURL string `firestore:"photo_url"`
 
-	LastAggregationTimestamp int64 `firestore:"last_aggregation_timestamp"`
+	LastRequests             []LastRequest `firestore:"last_requests"`
+	LastAggregationTimestamp int64         `firestore:"last_aggregation_timestamp"`
+}
+
+type LastRequest struct {
+	ID          string `firestore:"id"`
+	TimesheetID string `firestore:"timesheet_id"`
 }

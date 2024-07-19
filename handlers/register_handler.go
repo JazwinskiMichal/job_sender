@@ -40,21 +40,21 @@ func (h *RegisterHandler) showRegister(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	registerTmpl, err := h.templateService.ParseTemplate(constants.TemplateRegisterName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse register template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	err = h.templateService.ExecuteTemplate(registerTmpl, w, r, nil, userInfo)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 }
@@ -66,7 +66,7 @@ func (h *RegisterHandler) showRegisterConfirm(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		// Handle error (e.g., cookie not found)
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("email cookie not found: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *RegisterHandler) showRegisterConfirm(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		// Handle error
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not decode email from cookie: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *RegisterHandler) showRegisterConfirm(w http.ResponseWriter, r *http.Req
 	confirmRegistrationTmpl, err := h.templateService.ParseTemplate(constants.TemplateConfirmRegisterName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse confirm registration template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *RegisterHandler) showRegisterConfirm(w http.ResponseWriter, r *http.Req
 	err = h.templateService.ExecuteTemplate(confirmRegistrationTmpl, w, r, data, nil)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not execute template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 

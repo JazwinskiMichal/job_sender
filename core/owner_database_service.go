@@ -164,9 +164,25 @@ func (db *OwnerDatabaseService) DeleteOwner(id string) error {
 
 		// Delete the group's contractors.
 		for _, contractor := range contractors {
+			// Delete timesheets
+			timesheets, err := db.client.Collection("contractors").Doc(contractor.Ref.ID).Collection("timesheets").Documents(ctx).GetAll()
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					continue
+				}
+				return fmt.Errorf("could not get timesheets: %w", err)
+			}
+
+			for _, timesheet := range timesheets {
+				_, err := db.client.Collection("contractors").Doc(contractor.Ref.ID).Collection("timesheets").Doc(timesheet.Ref.ID).Delete(ctx)
+				if err != nil {
+					return fmt.Errorf("could not delete timesheet: %w", err)
+				}
+			}
+
 			contractorID := contractor.Ref.ID
 
-			_, err := db.client.Collection("contractors").Doc(contractorID).Delete(ctx)
+			_, err = db.client.Collection("contractors").Doc(contractorID).Delete(ctx)
 			if err != nil {
 				return fmt.Errorf("firestoredb: could not delete contractor: %w", err)
 			}

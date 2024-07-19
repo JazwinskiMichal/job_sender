@@ -40,6 +40,7 @@ func NewContractorsDatabaseService(firebaseService *FirebaseService) (*Contracto
 
 	return &ContractorsDatabaseService{
 		contractorsCollectionName: "contractors",
+		timesheetsCollectionName:  "timesheets",
 		client:                    client,
 	}, nil
 }
@@ -49,8 +50,8 @@ func (db *ContractorsDatabaseService) Close(context.Context) error {
 	return db.client.Close()
 }
 
-// ListContractors lists all contractors for a group.
-func (db *ContractorsDatabaseService) ListContractors(groupID string) ([]*types.Contractor, error) {
+// GetContractors gets all contractors for a group.
+func (db *ContractorsDatabaseService) GetContractors(groupID string) ([]*types.Contractor, error) {
 	ctx := context.Background()
 	iter := db.client.Collection(db.contractorsCollectionName).Where("group_id", "==", groupID).Documents(ctx)
 
@@ -89,23 +90,6 @@ func (db *ContractorsDatabaseService) GetContractor(id string) (*types.Contracto
 	}
 
 	return contractor, nil
-}
-
-// TODO: sprawdzić, bo aktualnie nieużwyane
-// GetContractorsTimesheet gets a contractor's timesheet by ID.
-func (db *ContractorsDatabaseService) GetContractorsTimesheet(id string) (*types.Timesheet, error) {
-	ctx := context.Background()
-	doc, err := db.client.Collection(db.contractorsCollectionName).Doc(id).Collection(db.timesheetsCollectionName).Doc(id).Get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("firestoredb: could not get timesheet: %w", err)
-	}
-
-	timesheet := &types.Timesheet{}
-	if err := doc.DataTo(timesheet); err != nil {
-		return nil, fmt.Errorf("firestoredb: could not convert data to timesheet: %w", err)
-	}
-
-	return timesheet, nil
 }
 
 // AddContractor adds a contractor to a group.
@@ -153,13 +137,16 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 func (db *ContractorsDatabaseService) UpdateContractor(contractor *types.Contractor) error {
 	ctx := context.Background()
 	_, err := db.client.Collection(db.contractorsCollectionName).Doc(contractor.ID).Set(ctx, map[string]interface{}{
-		"id":                         contractor.ID,
-		"group_id":                   contractor.GroupID,
-		"name":                       contractor.Name,
-		"surname":                    contractor.Surname,
-		"email":                      contractor.Email,
-		"phone":                      contractor.Phone,
-		"photo_url":                  contractor.PhotoURL,
+		"id":       contractor.ID,
+		"group_id": contractor.GroupID,
+
+		"name":      contractor.Name,
+		"surname":   contractor.Surname,
+		"email":     contractor.Email,
+		"phone":     contractor.Phone,
+		"photo_url": contractor.PhotoURL,
+
+		"last_requests":              contractor.LastRequests,
 		"last_aggregation_timestamp": contractor.LastAggregationTimestamp,
 	})
 	if err != nil {

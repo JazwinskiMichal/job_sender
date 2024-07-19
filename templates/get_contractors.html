@@ -1,0 +1,35 @@
+<h3>Timesheets</h3>
+<a href="/auth/contractors/add?groupID={{.GroupID}}" class="btn btn-success btn-sm" style="margin-bottom: 20px;">
+  <i class="glyphicon glyphicon-plus"></i>
+  <span>Add contractor</span>
+</a>
+
+<!-- Table structure -->
+<table class="table">
+  <thead>
+    <tr>
+      <!-- Dynamically create a column for each contractor -->
+      {{range .ContractorsWithTimesheets}}
+      <th><a href="/auth/contractors/{{.Contractor.ID}}/edit">{{.Contractor.Name}} {{.Contractor.Surname}}</a></th>
+      {{end}}
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <!-- Iterate over contractors to place timesheets in the correct column -->
+      {{range .ContractorsWithTimesheets}}
+      <td>
+        {{if .Timesheets}}
+          <!-- Display each timesheet for the contractor -->
+          {{range .Timesheets}}
+          <a href="{{.StorageURL}}">{{.RequestID}}</a><br>
+          {{end}}
+        {{else}}
+          <!-- No timesheet available for this contractor -->
+          No timesheets
+        {{end}}
+      </td>
+      {{end}}
+    </tr>
+  </tbody>
+</table>

@@ -6,14 +6,11 @@ import (
 
 // IContractorsDatabaseService is an interface for a database service that manages contractors.
 type IContractorsDatabaseService interface {
-	// ListContractors lists all for a group.
-	ListContractors(groupID string) ([]*types.Contractor, error)
+	// GetContractors lists all for a group.
+	GetContractors(groupID string) ([]*types.Contractor, error)
 
 	// GetContractor gets a contractor by ID.
 	GetContractor(id string) (*types.Contractor, error)
-
-	// GetContractorsTimesheet gets a contractor's timesheet by ID.
-	GetContractorsTimesheet(id string) (*types.Timesheet, error)
 
 	// AddContractor adds a contractor to a group.
 	AddContractor(groupID string, contractor *types.Contractor) error

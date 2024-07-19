@@ -15,20 +15,22 @@ import (
 
 type OwnersHandler struct {
 	authService           *core.AuthService
-	ownersDB              *core.OwnerDatabaseService
 	sessionManagerService *core.SessionManagerService
 	templateService       *core.TemplateService
 	errorReporterService  *core.ErrorReporterService
+
+	ownersDB *core.OwnerDatabaseService
 }
 
 // NewOwnersHandler creates a new OwnersHandler.
-func NewOwnersHandler(authService *core.AuthService, ownersDB *core.OwnerDatabaseService, sessionManagerService *core.SessionManagerService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService) *OwnersHandler {
+func NewOwnersHandler(authService *core.AuthService, sessionManagerService *core.SessionManagerService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService, ownersDB *core.OwnerDatabaseService) *OwnersHandler {
 	return &OwnersHandler{
 		authService:           authService,
-		ownersDB:              ownersDB,
 		sessionManagerService: sessionManagerService,
 		templateService:       templateService,
 		errorReporterService:  errorReporterService,
+
+		ownersDB: ownersDB,
 	}
 }
 
@@ -39,7 +41,7 @@ func (h *OwnersHandler) RegisterOwnersHandlers(r *mux.Router) {
 	r.Methods("GET").Path("/owners/{ID}/edit").HandlerFunc(h.EditOwner)
 
 	r.Methods("POST").Path("/owners").HandlerFunc(h.AddOwner)
-	r.Methods("PUT").Path("/owners/{ID}").HandlerFunc(h.UpdateOwner)
+	r.Methods("PUT").Path("/owners/{ID}").HandlerFunc(h.UpdateOwner) // TODO: Change to post as templates do not support put
 
 	r.Methods("DELETE").Path("/owners/{ID}").HandlerFunc(h.DeleteOwner)
 }
@@ -49,14 +51,14 @@ func (h *OwnersHandler) ShowAddOwner(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	ownerTmpl, err := h.templateService.ParseTemplate(constants.TemplateOwnerEditName)
+	ownerTmpl, err := h.templateService.ParseTemplate(constants.TemplateOwnerAddName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse owner template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -84,16 +86,20 @@ func (h *OwnersHandler) GetOwner(w http.ResponseWriter, r *http.Request) {
 	owner, err := h.ownersDB.GetOwnerByID(ownerID)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			http.Redirect(w, r, "/auth/owners/add", http.StatusFound)
+			http.Redirect(w, r, "/auth/owners/add", http.StatusSeeOther)
 			return
 		} else {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner: %w", err))
-			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 			return
 		}
 	}
 
-	http.Redirect(w, r, "/auth/groups/"+owner.GroupID, http.StatusFound)
+	if owner.GroupID == "" {
+		http.Redirect(w, r, "/auth/groups/add", http.StatusSeeOther)
+	} else {
+		http.Redirect(w, r, "/auth/groups/"+owner.GroupID, http.StatusSeeOther)
+	}
 }
 
 // EditOwner displays the edit owner page.
@@ -107,21 +113,21 @@ func (h *OwnersHandler) EditOwner(w http.ResponseWriter, r *http.Request) {
 	owner, err := h.ownersDB.GetOwnerByID(ownerID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	ownerTmpl, err := h.templateService.ParseTemplate(constants.TemplateOwnerEditName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse owner template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -137,7 +143,7 @@ func (h *OwnersHandler) AddOwner(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := h.sessionManagerService.GetElement(r, constants.UserSessionName, constants.SesstionOwnerIdField)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner id from session: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -145,7 +151,7 @@ func (h *OwnersHandler) AddOwner(w http.ResponseWriter, r *http.Request) {
 	owner, err := ownerFromForm(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner from form: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -158,7 +164,7 @@ func (h *OwnersHandler) AddOwner(w http.ResponseWriter, r *http.Request) {
 	ownerIDString, ok := ownerID.(string)
 	if !ok {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not convert owner id to string: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 	owner.ID = string(ownerIDString)
@@ -167,11 +173,11 @@ func (h *OwnersHandler) AddOwner(w http.ResponseWriter, r *http.Request) {
 	err = h.ownersDB.AddOwner(owner)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not add owner: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/auth/groups/add", http.StatusFound)
+	http.Redirect(w, r, "/auth/groups/add", http.StatusSeeOther)
 }
 
 // UpdateOwner updates an owner.
@@ -187,7 +193,7 @@ func (h *OwnersHandler) UpdateOwner(w http.ResponseWriter, r *http.Request) {
 	owner, err := ownerFromForm(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner from form: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -196,11 +202,11 @@ func (h *OwnersHandler) UpdateOwner(w http.ResponseWriter, r *http.Request) {
 	err = h.ownersDB.UpdateOwner(owner)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not update owner: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound) // TODO: group id is needed
+	http.Redirect(w, r, "/auth/contractors", http.StatusSeeOther) // TODO: group id is needed
 }
 
 // DeleteOwner deletes an owner.
@@ -214,7 +220,7 @@ func (h *OwnersHandler) DeleteOwner(w http.ResponseWriter, r *http.Request) {
 	err := h.ownersDB.DeleteOwner(ownerID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete owner: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 }

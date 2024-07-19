@@ -9,7 +9,7 @@ type IEmailService interface {
 	SendVerificationEmail(email string, link string) error
 
 	// SendTimsheetRequestEmail sends a timesheet request email to the contractor.
-	SendTimesheetRequestEmail(contractorEmail string, contractorID string, weekID string) error
+	SendTimesheetRequestEmail(contractor *types.Contractor, weekID string) error
 
 	// SendPasswordResetEmail sends a password reset email to the user.
 	// TODO: Implement this method.

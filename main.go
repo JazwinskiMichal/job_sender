@@ -77,6 +77,9 @@ func main() {
 
 	// Initialize Cloud Scheduler Service
 	schedulerService, err := core.NewSchedulerService(envVariables.ServiceAccountEmail, envVariables.ProjectID, envVariables.ProjectLocationID, secretServiceAccountKey)
+	if err != nil {
+		log.Fatalf("NewSchedulerService: %v", err)
+	}
 
 	// Initialize the Auth service
 	authService := core.NewAuthService(firebaseService, string(firebaseWebApiKey), sessionManagerService)
@@ -95,7 +98,7 @@ func main() {
 	}
 
 	// Create new Main handler and router
-	mainHandler := handlers.NewMainHandler(authService, ownersDB, errorReporterService)
+	mainHandler := handlers.NewMainHandler(authService, errorReporterService, ownersDB)
 
 	// Create the router
 	router := mainHandler.CreateRouter()
@@ -136,19 +139,19 @@ func main() {
 	}
 
 	// Create owners handler
-	ownersHandler := handlers.NewOwnersHandler(authService, ownersDB, sessionManagerService, templateService, errorReporterService)
+	ownersHandler := handlers.NewOwnersHandler(authService, sessionManagerService, templateService, errorReporterService, ownersDB)
 	ownersHandler.RegisterOwnersHandlers(authRouter)
 
 	// Create groups handler
-	groupsHandler := handlers.NewGroupsHandler(authService, ownersDB, groupsDB, schedulerService, sessionManagerService, templateService, errorReporterService)
+	groupsHandler := handlers.NewGroupsHandler(authService, schedulerService, sessionManagerService, templateService, errorReporterService, ownersDB, groupsDB)
 	groupsHandler.RegisterGroupsHandlers(authRouter)
 
 	// Create contractor handler
-	contractorsHandler := handlers.NewContractorsHandler(authService, groupsDB, contractorsDB, cloudTasksService, templateService, errorReporterService, envVariables)
+	contractorsHandler := handlers.NewContractorsHandler(authService, cloudTasksService, templateService, errorReporterService, groupsDB, contractorsDB, timesheetsDB, envVariables)
 	contractorsHandler.RegisterContractorsHandler(authRouter)
 
 	// Create timesheets handler
-	timesheetsHandler := handlers.NewTimesheetsHandler(emailService, contractorsDB, timesheetsDB, storageService, errorReporterService)
+	timesheetsHandler := handlers.NewTimesheetsHandler(emailService, storageService, errorReporterService, groupsDB, contractorsDB, timesheetsDB)
 	timesheetsHandler.RegisterTimesheetsHandlers(router)
 
 	// Start the server
@@ -157,4 +160,5 @@ func main() {
 	}
 }
 
-// TODO: dać możliwość na liście kontraktowców do ręcznego wyzwolenia timesheet request
+// TODO: dać możliwość na liście kontraktowców do ręcznego wyzwolenia timesheet request, ale z tym trzeba pomyslec, bo wtedy ten request ma byc na jaki zakres???
+// TODO: kolejny etap to z wykorzystaniem email service wysłać maila zbiorczego do klienta celem zatwierdzenia kart pracy, dodać notyfikacje jak klient odpisze. do tego jest potrzeba również konfiguracji klientów

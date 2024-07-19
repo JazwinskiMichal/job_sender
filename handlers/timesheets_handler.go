@@ -10,26 +10,31 @@ import (
 
 	"job_sender/core"
 	"job_sender/types"
+	constants "job_sender/utils/constants"
 
 	"github.com/gorilla/mux"
 )
 
 type TimesheetsHandler struct {
 	emailService         *core.EmailService
-	constractorsDB       *core.ContractorsDatabaseService
-	timesheetsDB         *core.TimesheetsDatabaseService
 	storageService       *core.StorageService
 	errorReporterService *core.ErrorReporterService
+
+	groupsDB      *core.GroupsDatabaseService
+	contractorsDB *core.ContractorsDatabaseService
+	timesheetsDB  *core.TimesheetsDatabaseService
 }
 
 // NewTimesheetsHandler creates a new TimesheetsHandler.
-func NewTimesheetsHandler(emailService *core.EmailService, contractorsDB *core.ContractorsDatabaseService, timesheetsDB *core.TimesheetsDatabaseService, storageService *core.StorageService, errorReporterService *core.ErrorReporterService) *TimesheetsHandler {
+func NewTimesheetsHandler(emailService *core.EmailService, storageService *core.StorageService, errorReporterService *core.ErrorReporterService, groupsDB *core.GroupsDatabaseService, contractorsDB *core.ContractorsDatabaseService, timesheetsDB *core.TimesheetsDatabaseService) *TimesheetsHandler {
 	return &TimesheetsHandler{
 		emailService:         emailService,
-		constractorsDB:       contractorsDB,
-		timesheetsDB:         timesheetsDB,
 		storageService:       storageService,
 		errorReporterService: errorReporterService,
+
+		groupsDB:      groupsDB,
+		contractorsDB: contractorsDB,
+		timesheetsDB:  timesheetsDB,
 	}
 }
 
@@ -48,17 +53,28 @@ func (h *TimesheetsHandler) RequestTimesheet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// TODO: This check for enen week should also be aligned for settings for the schedule
-	// Get the current year and week number
-	_, week := time.Now().ISOWeek()
-
-	// Check if it's an even week
-	if week%2 != 0 {
+	// Get the interval from the Group schedule
+	group, err := h.groupsDB.GetGroup(groupID)
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to get group: %w", err))
 		return
 	}
 
+	// Check if the current time is within the schedule's start and end dates
+	requestID, err := getRequestID(group)
+	if err != nil {
+		if err.Error() == "current time is not within the schedule's start and end dates" {
+			return
+		} else if err.Error() == "not the correct request time" {
+			return
+		} else {
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to get requestID ID: %w", err))
+			return
+		}
+	}
+
 	// Get contractors from the database
-	contractors, err := h.constractorsDB.ListContractors(groupID)
+	contractors, err := h.contractorsDB.GetContractors(groupID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to get contractors: %w", err))
 		return
@@ -66,10 +82,20 @@ func (h *TimesheetsHandler) RequestTimesheet(w http.ResponseWriter, r *http.Requ
 
 	// Send timesheet request emails to the contractors
 	for _, contractor := range contractors {
-		err = h.emailService.SendTimesheetRequestEmail(contractor.Email, contractor.ID, fmt.Sprintf("%02d/%02d", week-1, week))
+		err = h.emailService.SendTimesheetRequestEmail(contractor, requestID)
 		if err != nil {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to send timesheet request email: %w", err))
-			return
+			continue
+		}
+
+		// Update the contractor's last request
+		contractor.LastRequests = append(contractor.LastRequests, types.LastRequest{ID: requestID, TimesheetID: ""}) // TODO: co w przypdaku zmiany schedule, czy stare requesty maja byc usuwane?
+
+		// Update the contractor in the database
+		err = h.contractorsDB.UpdateContractor(contractor)
+		if err != nil {
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to update contractor: %w", err))
+			continue
 		}
 	}
 }
@@ -80,7 +106,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to read request body: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -89,15 +115,17 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 	err = json.Unmarshal(body, &timesheetAggregation)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to unmarshal timesheet aggregation model: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
+	emailSubject := fmt.Sprintf("Timesheet %s [%s]", timesheetAggregation.RequestID, timesheetAggregation.ContractorID)
+
 	// Get the attachments of the email
-	attachments, err := h.emailService.GetEmailAttachments(fmt.Sprintf("[Contractor ID: %s]", timesheetAggregation.ContractorID))
+	attachments, err := h.emailService.GetEmailAttachments(emailSubject)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to get email attachments: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -110,26 +138,97 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		timesheetUrl, err := h.storageService.UploadFile(fmt.Sprintf("%s_%s_timesheet%s", timesheetAggregation.GroupID, timesheetAggregation.ContractorID, extension), attachment.Content)
 		if err != nil {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to upload timesheet to storage: %w", err))
-			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 			return
 		}
 
 		timesheet := &types.Timesheet{
-			ID:           attachment.Filename,
+			ID:           fmt.Sprintf("%s_%s", timesheetAggregation.RequestID, timesheetAggregation.ContractorID),
 			ContractorID: timesheetAggregation.ContractorID,
-			GroupID:      timesheetAggregation.GroupID,
-			StorageURL:   timesheetUrl,
+			RequestID:    timesheetAggregation.RequestID,
+
+			StorageURL: timesheetUrl,
 		}
 
 		// Add the timesheet to the database
 		h.timesheetsDB.AddTimesheet(timesheet) // TODO: Tutaj tez zapisywac trzeba mądrze, bo aktualnie za kazdym odswieżeniem Contractors list jest wyzwalany task do pobierania timesheet z maila
 
-		// Archive the email
-		err = h.emailService.ArchiveEmail("Timesheet")
+		// Get contractor
+		contractor, err := h.contractorsDB.GetContractor(timesheetAggregation.ContractorID)
 		if err != nil {
-			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to archive email: %w", err))
-			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to get contractor: %w", err))
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 			return
 		}
+
+		// Update contractors last request
+		for i, lastRequest := range contractor.LastRequests {
+			if lastRequest.ID == timesheetAggregation.RequestID {
+				contractor.LastRequests[i].TimesheetID = timesheet.ID
+			}
+		}
+
+		// Update the contractor in the database
+		err = h.contractorsDB.UpdateContractor(contractor)
+		if err != nil {
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to update contractor: %w", err))
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
+			return
+		}
+
+		// Archive the email
+		err = h.emailService.ArchiveEmail(emailSubject)
+		if err != nil {
+			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to archive email: %w", err))
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
+			return
+		}
+	}
+}
+
+// getRequestID returns the request ID for the group based on the schedule.
+func getRequestID(group *types.Group) (string, error) {
+
+	// Parse the start and end dates from the Schedule
+	layout := "2006-01-02" // the layout string used for parsing
+	startDate, err := time.Parse(layout, group.Schedule.StartDate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse start date: %w", err)
+	}
+
+	endDate, err := time.Parse(layout, group.Schedule.EndDate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse end date: %w", err)
+	}
+
+	// Get the current time in the schedule's timezone
+	loc, err := time.LoadLocation(group.Schedule.Timezone)
+	if err != nil {
+		return "", fmt.Errorf("failed to load location: %w", err)
+	}
+	now := time.Now().In(loc)
+
+	// Check if the current time is within the schedule's start and end dates
+	if now.Before(startDate) || now.After(endDate) {
+		return "", fmt.Errorf("current time is not within the schedule's start and end dates") // TODO: inform owner about it
+	}
+
+	// Get the current week and month number
+	currentYear := now.Year()
+	_, currentWeek := now.ISOWeek()
+	currentMonth := int(now.Month())
+
+	if group.Schedule.IntervalType == constants.Weeks {
+		if currentWeek%group.Schedule.Interval != 0 {
+			return "", fmt.Errorf("not the correct request time")
+		}
+		return fmt.Sprintf("%d/%d %d", max(0, currentWeek-1), currentWeek, currentYear), nil
+	} else if group.Schedule.IntervalType == constants.Months {
+		if currentMonth%group.Schedule.Interval != 0 {
+			return "", fmt.Errorf("not the correct request time")
+		}
+		return fmt.Sprintf("%d/%d %d", max(0, currentMonth-1), currentMonth, currentYear), nil
+	} else {
+		return "", fmt.Errorf("invalid interval type")
 	}
 }

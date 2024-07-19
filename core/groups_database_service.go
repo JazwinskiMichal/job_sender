@@ -13,8 +13,9 @@ import (
 )
 
 type GroupsDatabaseService struct {
-	collectionName string
-	client         *firestore.Client
+	ownerCollectionName string
+	groupCollectionName string
+	client              *firestore.Client
 }
 
 // Ensure GroupsDatabaseService implements IGroupsDatabaseService.
@@ -37,8 +38,9 @@ func NewGroupsDatabaseService(firebaseService *FirebaseService) (*GroupsDatabase
 	}
 
 	return &GroupsDatabaseService{
-		collectionName: "groups",
-		client:         client,
+		ownerCollectionName: "owners",
+		groupCollectionName: "groups",
+		client:              client,
 	}, nil
 }
 
@@ -50,7 +52,7 @@ func (db *GroupsDatabaseService) Close(context.Context) error {
 // GetGroup gets a group by ID.
 func (db *GroupsDatabaseService) GetGroup(id string) (*types.Group, error) {
 	ctx := context.Background()
-	doc, err := db.client.Collection(db.collectionName).Doc(id).Get(ctx)
+	doc, err := db.client.Collection(db.groupCollectionName).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			// Directly return the NotFound error
@@ -74,7 +76,7 @@ func (db *GroupsDatabaseService) AddGroup(group *types.Group) (*types.Group, err
 
 	// Check if the group already exists.
 	if group.ID != "" {
-		_, err := db.client.Collection(db.collectionName).Doc(group.ID).Get(ctx)
+		_, err := db.client.Collection(db.groupCollectionName).Doc(group.ID).Get(ctx)
 		if err != nil {
 			if status.Code(err) == codes.AlreadyExists {
 				return nil, status.Errorf(codes.AlreadyExists, "group with ID %s already exists", group.ID)
@@ -86,11 +88,14 @@ func (db *GroupsDatabaseService) AddGroup(group *types.Group) (*types.Group, err
 		}
 	}
 
-	ref := db.client.Collection(db.collectionName).NewDoc()
+	ref := db.client.Collection(db.groupCollectionName).NewDoc()
 	groupMap := map[string]interface{}{
 		"id":       ref.ID,
-		"name":     group.Name,
 		"owner_id": group.OwnerID,
+
+		"name": group.Name,
+
+		"schedule": group.Schedule,
 	}
 
 	_, err := ref.Create(ctx, groupMap)
@@ -107,7 +112,7 @@ func (db *GroupsDatabaseService) AddGroup(group *types.Group) (*types.Group, err
 // UpdateGroup updates a group.
 func (db *GroupsDatabaseService) UpdateGroup(group *types.Group) error {
 	ctx := context.Background()
-	_, err := db.client.Collection(db.collectionName).Doc(group.ID).Set(ctx, group)
+	_, err := db.client.Collection(db.groupCollectionName).Doc(group.ID).Set(ctx, group)
 	if err != nil {
 		return fmt.Errorf("could not update group: %w", err)
 	}
@@ -120,7 +125,7 @@ func (db *GroupsDatabaseService) DeleteGroup(id string) error {
 	ctx := context.Background()
 
 	// Get the group.
-	doc, err := db.client.Collection(db.collectionName).Doc(id).Get(ctx)
+	doc, err := db.client.Collection(db.groupCollectionName).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return status.Errorf(codes.NotFound, "group with ID %s does not exist", id)
@@ -141,18 +146,55 @@ func (db *GroupsDatabaseService) DeleteGroup(id string) error {
 	}
 
 	for _, contractor := range contractors {
+		// Delete timesheets
+		timesheets, err := db.client.Collection("contractors").Doc(contractor.Ref.ID).Collection("timesheets").Documents(ctx).GetAll()
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return fmt.Errorf("could not get timesheets: %w", err)
+		}
+
+		for _, timesheet := range timesheets {
+			_, err := db.client.Collection("contractors").Doc(contractor.Ref.ID).Collection("timesheets").Doc(timesheet.Ref.ID).Delete(ctx)
+			if err != nil {
+				return fmt.Errorf("could not delete timesheet: %w", err)
+			}
+		}
+
 		contractorID := contractor.Ref.ID
 
-		_, err := db.client.Collection("contractors").Doc(contractorID).Delete(ctx)
+		_, err = db.client.Collection("contractors").Doc(contractorID).Delete(ctx)
 		if err != nil {
 			return fmt.Errorf("could not delete contractor: %w", err)
 		}
 	}
 
 	// Delete the group.
-	_, err = db.client.Collection(db.collectionName).Doc(id).Delete(ctx)
+	_, err = db.client.Collection(db.groupCollectionName).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("could not delete group: %w", err)
+	}
+
+	// Delete the groupID from the owner.
+	if group.OwnerID != "" {
+		ownerDoc, err := db.client.Collection(db.ownerCollectionName).Doc(group.OwnerID).Get(ctx)
+		if err != nil {
+			return fmt.Errorf("could not get owner: %w", err)
+		}
+
+		var owner types.Owner
+		err = ownerDoc.DataTo(&owner)
+		if err != nil {
+			return fmt.Errorf("could not convert owner data: %w", err)
+		}
+
+		owner.GroupID = ""
+
+		_, err = db.client.Collection(db.ownerCollectionName).Doc(group.OwnerID).Set(ctx, owner)
+		if err != nil {
+			return fmt.Errorf("could not update owner: %w", err)
+		}
 	}
 
 	return nil

@@ -4,4 +4,5 @@ package types
 type TimesheetAggregation struct {
 	ContractorID string
 	GroupID      string
+	RequestID    string
 }

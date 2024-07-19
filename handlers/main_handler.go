@@ -14,22 +14,24 @@ import (
 
 type MainHandler struct {
 	authService          *core.AuthService
-	ownersDB             *core.OwnerDatabaseService
 	errorReporterService *core.ErrorReporterService
+
+	ownersDB *core.OwnerDatabaseService
 }
 
-func NewMainHandler(authService *core.AuthService, ownersDB *core.OwnerDatabaseService, errorReporterService *core.ErrorReporterService) *MainHandler {
+func NewMainHandler(authService *core.AuthService, errorReporterService *core.ErrorReporterService, ownersDB *core.OwnerDatabaseService) *MainHandler {
 	return &MainHandler{
 		authService:          authService,
-		ownersDB:             ownersDB,
 		errorReporterService: errorReporterService,
+
+		ownersDB: ownersDB,
 	}
 }
 
 func (h *MainHandler) CreateRouter() *mux.Router {
 	r := mux.NewRouter()
 
-	r.Handle("/", http.RedirectHandler("/main", http.StatusFound))
+	r.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
 
 	r.Methods("GET").Path("/main").Handler(http.HandlerFunc(h.showMain))
 
@@ -43,7 +45,7 @@ func (h *MainHandler) showMain(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -52,17 +54,19 @@ func (h *MainHandler) showMain(w http.ResponseWriter, r *http.Request) {
 		owner, err := h.ownersDB.GetOwnerByEmail(userInfo.Email)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				http.Redirect(w, r, "/auth/owners/add", http.StatusFound)
+				http.Redirect(w, r, "/auth/owners/add", http.StatusSeeOther)
 				return
 			}
 
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get owner by email: %w", err))
-			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 			return
 		}
 
-		http.Redirect(w, r, "/auth/owners/"+owner.ID, http.StatusFound)
+		http.Redirect(w, r, "/auth/owners/"+owner.ID, http.StatusSeeOther)
+		return
 	} else {
-		http.Redirect(w, r, "/login", http.StatusFound)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
 	}
 }

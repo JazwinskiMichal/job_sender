@@ -14,27 +14,34 @@ import (
 )
 
 type ContractorsHandler struct {
-	authService   *core.AuthService
-	groupsDB      *core.GroupsDatabaseService
-	contractorsDB *core.ContractorsDatabaseService
-	//storageService       *core.StorageService
+	authService          *core.AuthService
 	cloudTaskService     *core.CloudTasksService
 	templateService      *core.TemplateService
 	errorReporterService *core.ErrorReporterService
 
+	groupsDB      *core.GroupsDatabaseService
+	contractorsDB *core.ContractorsDatabaseService
+	timesheetsDB  *core.TimesheetsDatabaseService
+
 	envVariables *types.EnvVariables
 }
 
+type contractorWithTimesheets struct {
+	Contractor *types.Contractor
+	Timesheets []*types.Timesheet
+}
+
 // NewContractorsHandler creates a new ContractorsHandler.
-func NewContractorsHandler(authService *core.AuthService, groupsDB *core.GroupsDatabaseService, contractorsDB *core.ContractorsDatabaseService, cloudTaskService *core.CloudTasksService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService, envVariables *types.EnvVariables) *ContractorsHandler {
+func NewContractorsHandler(authService *core.AuthService, cloudTaskService *core.CloudTasksService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService, groupsDB *core.GroupsDatabaseService, contractorsDB *core.ContractorsDatabaseService, timesheetsDB *core.TimesheetsDatabaseService, envVariables *types.EnvVariables) *ContractorsHandler {
 	return &ContractorsHandler{
-		authService:   authService,
-		groupsDB:      groupsDB,
-		contractorsDB: contractorsDB,
-		//storageService:       storageService,
+		authService:          authService,
 		cloudTaskService:     cloudTaskService,
 		templateService:      templateService,
 		errorReporterService: errorReporterService,
+
+		groupsDB:      groupsDB,
+		contractorsDB: contractorsDB,
+		timesheetsDB:  timesheetsDB,
 
 		envVariables: envVariables,
 	}
@@ -42,10 +49,9 @@ func NewContractorsHandler(authService *core.AuthService, groupsDB *core.GroupsD
 
 // Register contractor handlers.
 func (h *ContractorsHandler) RegisterContractorsHandler(r *mux.Router) {
-	r.Methods("GET").Path("/contractors").HandlerFunc(h.ListContractors)
+	r.Methods("GET").Path("/contractors").HandlerFunc(h.GetContractors)
 	r.Methods("GET").Path("/contractors/add").HandlerFunc(h.ShowAddContractor)
 	r.Methods("GET").Path("/contractors/{ID}/edit").HandlerFunc(h.ShowEditContractor)
-	r.Methods("GET").Path("/contractors/{ID}/timeSheet").HandlerFunc(h.GetContractorsTimeSheet)
 
 	r.Methods("POST").Path("/contractors").HandlerFunc(h.AddContractor)
 	r.Methods("POST").Path("/contractors/{ID}").HandlerFunc(h.EditContractor)
@@ -53,8 +59,8 @@ func (h *ContractorsHandler) RegisterContractorsHandler(r *mux.Router) {
 	r.Methods("DELETE").Path("/contractors/{ID}").HandlerFunc(h.DeleteContractor)
 }
 
-// ListContractors lists all contractors for a group.
-func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Request) {
+// GetContractors gets the contractors for a group.
+func (h *ContractorsHandler) GetContractors(w http.ResponseWriter, r *http.Request) {
 	// Get the group ID from the query.
 	groupID := r.URL.Query().Get("groupID")
 	if groupID == "" {
@@ -65,7 +71,7 @@ func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Requ
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -77,19 +83,19 @@ func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Requ
 			groupTmpl, err := h.templateService.ParseTemplate(constants.TemplateGroupEditName)
 			if err != nil {
 				h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse group template: %w", err))
-				http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+				http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 				return
 			}
 
 			err = h.templateService.ExecuteTemplate(groupTmpl, w, r, nil, userInfo)
 			if err != nil {
 				h.errorReporterService.ReportError(w, r, err)
-				http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+				http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 				return
 			}
 		} else {
 			h.errorReporterService.ReportError(w, r, err)
-			http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 			return
 		}
 	}
@@ -99,29 +105,41 @@ func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Requ
 	userInfo.GroupName = group.Name
 
 	// Get the contractors.
-	contractors, err := h.contractorsDB.ListContractors(groupID)
+	contractors, err := h.contractorsDB.GetContractors(groupID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
+	var timesheets []*types.Timesheet
+
 	// Start timeheet aggregation for each contractor
 	for _, contractor := range contractors {
-		taskCreated, err := h.cloudTaskService.CreateTimesheetAggregatorTask(h.envVariables.ProjectID, h.envVariables.ProjectLocationID, h.envVariables.EmailAggregatorQueueName, contractor, types.TimesheetAggregation{
-			GroupID:      groupID,
-			ContractorID: contractor.ID,
-		})
-		if err != nil {
-			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create timesheet aggregator task: %w", err))
-			continue
+		for _, request := range contractor.LastRequests {
+			if request.TimesheetID == "" {
+				_, err := h.cloudTaskService.CreateTimesheetAggregatorTask(h.envVariables.ProjectID, h.envVariables.ProjectLocationID, h.envVariables.EmailAggregatorQueueName, contractor, types.TimesheetAggregation{
+					GroupID:      groupID,
+					ContractorID: contractor.ID,
+					RequestID:    request.ID,
+				})
+				if err != nil {
+					h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create timesheet aggregator task: %w", err))
+					continue
+				}
+			}
+
+			// Get the timesheet
+			timesheet, err := h.timesheetsDB.GetTimesheet(fmt.Sprintf("%s_%s", request.ID, contractor.ID))
+			if err != nil {
+				h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get timesheet: %w", err))
+				continue
+			}
+
+			timesheets = append(timesheets, timesheet)
 		}
 
-		if !taskCreated {
-			continue
-		}
-
-		// Update the contractor
+		// Update the contractors last aggregation timestamp
 		err = h.contractorsDB.UpdateContractor(contractor)
 		if err != nil {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("could not update contractor: %w", err))
@@ -129,23 +147,36 @@ func (h *ContractorsHandler) ListContractors(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	var contractorsWithTimesheets []contractorWithTimesheets
+
+	for _, contractor := range contractors {
+		var cwt contractorWithTimesheets
+		cwt.Contractor = contractor
+		for _, timesheet := range timesheets {
+			if timesheet.ContractorID == contractor.ID {
+				cwt.Timesheets = append(cwt.Timesheets, timesheet)
+			}
+		}
+		contractorsWithTimesheets = append(contractorsWithTimesheets, cwt)
+	}
+
 	data := map[string]interface{}{
-		"GroupID":     groupID,
-		"Contractors": contractors,
+		"GroupID":                   groupID,
+		"ContractorsWithTimesheets": contractorsWithTimesheets,
 	}
 
 	// Execute the template
-	listTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsListName)
+	listTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsGetName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse list template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	err = h.templateService.ExecuteTemplate(listTmpl, w, r, data, userInfo)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not execute template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 }
@@ -163,14 +194,14 @@ func (h *ContractorsHandler) ShowAddContractor(w http.ResponseWriter, r *http.Re
 	group, err := h.groupsDB.GetGroup(groupID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get group: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -181,7 +212,7 @@ func (h *ContractorsHandler) ShowAddContractor(w http.ResponseWriter, r *http.Re
 	addTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsAddName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse add template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -196,7 +227,7 @@ func (h *ContractorsHandler) ShowAddContractor(w http.ResponseWriter, r *http.Re
 	err = h.templateService.ExecuteTemplate(addTmpl, w, r, data, userInfo)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not execute template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 }
@@ -214,7 +245,7 @@ func (h *ContractorsHandler) ShowEditContractor(w http.ResponseWriter, r *http.R
 	contractor, err := h.contractorsDB.GetContractor(id)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -222,14 +253,14 @@ func (h *ContractorsHandler) ShowEditContractor(w http.ResponseWriter, r *http.R
 	group, err := h.groupsDB.GetGroup(contractor.GroupID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get group: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	userInfo, err := h.authService.CheckUser(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not check user: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -240,32 +271,14 @@ func (h *ContractorsHandler) ShowEditContractor(w http.ResponseWriter, r *http.R
 	editTmpl, err := h.templateService.ParseTemplate(constants.TemplateContractorsEditName)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not parse edit template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
 	err = h.templateService.ExecuteTemplate(editTmpl, w, r, contractor, userInfo)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not execute template: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
-		return
-	}
-}
-
-// GetContractorsTimeSheet gets a contractor's timesheet by ID.
-func (h *ContractorsHandler) GetContractorsTimeSheet(w http.ResponseWriter, r *http.Request) {
-	// Get the contractor ID from the request.
-	id := mux.Vars(r)["ID"]
-	if id == "" {
-		http.Error(w, "ID is required", http.StatusBadRequest)
-		return
-	}
-
-	// Get the contractor's timesheet.
-	_, err := h.contractorsDB.GetContractorsTimesheet(id)
-	if err != nil {
-		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 }
@@ -283,7 +296,7 @@ func (h *ContractorsHandler) AddContractor(w http.ResponseWriter, r *http.Reques
 	contractor, err := h.contractorFromForm(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get contractor from form: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -291,11 +304,11 @@ func (h *ContractorsHandler) AddContractor(w http.ResponseWriter, r *http.Reques
 	err = h.contractorsDB.AddContractor(groupID, contractor)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusFound)
+	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusSeeOther)
 }
 
 // EditContractor updates a contractor.
@@ -318,7 +331,7 @@ func (h *ContractorsHandler) EditContractor(w http.ResponseWriter, r *http.Reque
 	contractor, err := h.contractorFromForm(r)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get contractor from form: %w", err))
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
@@ -328,11 +341,11 @@ func (h *ContractorsHandler) EditContractor(w http.ResponseWriter, r *http.Reque
 	err = h.contractorsDB.UpdateContractor(contractor)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusFound)
+	http.Redirect(w, r, "/auth/contractors?groupID="+groupID, http.StatusSeeOther)
 }
 
 // DeleteContractor deletes a contractor.
@@ -348,11 +361,11 @@ func (h *ContractorsHandler) DeleteContractor(w http.ResponseWriter, r *http.Req
 	err := h.contractorsDB.DeleteContractor(id)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, err)
-		http.Redirect(w, r, "/somethingWentWrong", http.StatusFound)
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/auth/contractors", http.StatusFound) // TODO: group id is needed
+	http.Redirect(w, r, "/auth/contractors", http.StatusSeeOther) // TODO: group id is needed
 }
 
 // contractorFromForm creates a contractor from a form.

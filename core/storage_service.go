@@ -51,7 +51,7 @@ func (s *StorageService) UploadFile(objectName string, data []byte) (string, err
 	obj := s.storageBucket.Object(objectName)
 	w := obj.NewWriter(ctx)
 
-	// Warning: storage.AllUsers gives public read access to anyone.
+	// TODO: storage.AllUsers gives public read access to anyone.
 	w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
 	w.ContentType = "application/octet-stream"
 

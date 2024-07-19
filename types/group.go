@@ -6,4 +6,6 @@ type Group struct {
 	OwnerID string `firestore:"owner_id"`
 
 	Name string `firestore:"name"`
+
+	Schedule Schedule `firestore:"schedule"`
 }

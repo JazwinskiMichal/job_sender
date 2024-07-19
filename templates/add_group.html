@@ -1,10 +1,13 @@
-<h3>Edit group</h3>
+<h3>Add group</h3>
 
-<form method="post" enctype="multipart/form-data" action="/auth/groups/{{.ID}}">
-    <div class="form-group">
-      <label for="ID">ID</label>
-      <input class="form-control" name="ID" id="ID" value="{{.ID}}" readonly>
+<!-- TODO: kiedy dodać grupe bez name przeskakuje na edit group dziwnie, zamiast wyswietlic error message -->
+<form method="post" enctype="multipart/form-data" action="/auth/groups">
+    <!-- Error Message Placeholder -->
+    {{if .ErrorMessage}}
+    <div id="schedulerConfigError" class="alert alert-danger">
+        {{.ErrorMessage}}
     </div>
+    {{end}}
 
     <div class="form-group">
       <label for="Name">Name</label>
@@ -34,13 +37,13 @@
       <div class="form-group">
         <label for="Weekday">Day of week, e.g. Monday</label>
         <select class="form-control" name="weekday" id="Weekday">
-          <option value="Monday" {{if eq .Schedule.Weekday "Monday"}}selected{{else if not .Schedule.Weekday}}selected{{end}}>Monday</option>
-          <option value="Tuesday" {{if eq .Schedule.Weekday "Tuesday"}}selected{{end}}>Tuesday</option>
-          <option value="Wednesday" {{if eq .Schedule.Weekday "Wednesday"}}selected{{end}}>Wednesday</option>
-          <option value="Thursday" {{if eq .Schedule.Weekday "Thursday"}}selected{{end}}>Thursday</option>
-          <option value="Friday" {{if eq .Schedule.Weekday "Friday"}}selected{{end}}>Friday</option>
-          <option value="Saturday" {{if eq .Schedule.Weekday "Saturday"}}selected{{end}}>Saturday</option>
-          <option value="Sunday" {{if eq .Schedule.Weekday "Sunday"}}selected{{end}}>Sunday</option>
+          <option value="Monday" selected>Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+          <option value="Saturday">Saturday</option>
+          <option value="Sunday">Sunday</option>
         </select>
       </div>
 
@@ -67,9 +70,9 @@
       <!-- Selection for Interval Type -->
       <div class="form-group">
         <label>Interval Type</label><br>
-        <input type="radio" id="intervalTypeWeeks" name="interval_type" value="weeks" {{if eq .Schedule.IntervalType 0}}checked{{end}}>
+        <input type="radio" id="intervalTypeWeeks" name="interval_type" value="weeks" checked>
         <label for="intervalTypeWeeks">Weeks</label><br>
-        <input type="radio" id="intervalTypeMonths" name="interval_type" value="months" {{if eq .Schedule.IntervalType 1}}checked{{end}}>
+        <input type="radio" id="intervalTypeMonths" name="interval_type" value="months">
         <label for="intervalTypeMonths">Months</label>
       </div>
 
@@ -79,6 +82,19 @@
         <input type="number" class="form-control" name="interval" id="Interval" value="{{if .Schedule.Interval}}{{.Schedule.Interval}}{{else}}2{{end}}" min="1">
       </div>
     </div>
+
+    <!-- Script to adjust the button text based on the collapse state -->
+    <script>
+      // Listen for the collapse to be shown and adjust the button text
+      $('#scheduleSettings').on('show.bs.collapse', function () {
+        $('[data-target="#scheduleSettings"]').text('Hide schedule configuration');
+      });
+    
+      // Listen for the collapse to be hidden and adjust the button text back
+      $('#scheduleSettings').on('hide.bs.collapse', function () {
+        $('[data-target="#scheduleSettings"]').text('Show schedule configuration');
+      });
+    </script>
 
     <!-- Script to toggle input fields based on the selected interval type -->
     <script>
@@ -99,52 +115,31 @@
       });
     </script>
 
-    <!-- Script to adjust the button text based on the collapse state -->
-    <script>
-      // Listen for the collapse to be shown and adjust the button text
-      $('#scheduleSettings').on('show.bs.collapse', function () {
-        $('[data-target="#scheduleSettings"]').text('Hide schedule configuration');
-      });
-    
-      // Listen for the collapse to be hidden and adjust the button text back
-      $('#scheduleSettings').on('hide.bs.collapse', function () {
-        $('[data-target="#scheduleSettings"]').text('Show schedule configuration');
-      });
-    </script>
-
     <!-- Script to populate timezones -->
     <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        populateTimezones('{{.Schedule.Timezone}}'); // Pass the server-side timezone value
-      });
-    </script>
-    <script>
-      function populateTimezones(serverTimezone) {
+      function populateTimezones() {
         const timezoneSelect = document.getElementById('Timezone');
         const timezones = moment.tz.names(); // Get list of timezone names
-    
+
         timezones.forEach((tz) => {
           const option = document.createElement('option');
           option.value = tz;
           option.text = tz;
           timezoneSelect.appendChild(option);
         });
-    
-        // Set timezone based on serverTimezone or local timezone
-        const selectedTimezone = serverTimezone || moment.tz.guess();
+
+        // Set local timezone as default
         try {
-          timezoneSelect.value = selectedTimezone;
+          const localTimezone = moment.tz.guess();
+          timezoneSelect.value = localTimezone;
         } catch (e) {
-          console.error('Could not set timezone:', e);
+          console.error('Could not set local timezone:', e);
         }
       }
+
+      // Populate timezones and set local timezone on page load
+      document.addEventListener('DOMContentLoaded', populateTimezones);
     </script>
 
     <button class="btn btn-success">Save</button>
-  </form>
-
-<div style="margin-top: 20px;">
-    <form action="/auth/groups/{{.ID}}/delete" method="get" onsubmit="return confirm('Are you sure you want to delete this group?');">
-        <button type="submit" class="btn btn-danger">Delete Group</button>
-    </form>
-</div>
+</form>
