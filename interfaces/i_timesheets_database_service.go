@@ -9,8 +9,8 @@ type ITimesheetsDatabaseService interface {
 	// ListTimesheets lists all timesheets for a group.
 	ListTimesheets(groupID string) ([]*types.Timesheet, error)
 
-	// GetTimesheet gets a timesheet by ID.
-	GetTimesheet(id string) (*types.Timesheet, error)
+	// GetTimesheet gets a timesheet by ContractorID and RequestID.
+	GetTimesheet(contractorID string, requestID string) (*types.Timesheet, error)
 
 	// AddTimesheet adds a timesheet to a group.
 	AddTimesheet(timesheet *types.Timesheet) error

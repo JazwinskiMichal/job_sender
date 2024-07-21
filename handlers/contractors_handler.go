@@ -9,6 +9,7 @@ import (
 	constants "job_sender/utils/constants"
 
 	"github.com/gorilla/mux"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -117,7 +118,7 @@ func (h *ContractorsHandler) GetContractors(w http.ResponseWriter, r *http.Reque
 	// Start timeheet aggregation for each contractor
 	for _, contractor := range contractors {
 		for _, request := range contractor.LastRequests {
-			if request.TimesheetID == "" {
+			if request.Timestamp == 0 {
 				_, err := h.cloudTaskService.CreateTimesheetAggregatorTask(h.envVariables.ProjectID, h.envVariables.ProjectLocationID, h.envVariables.EmailAggregatorQueueName, contractor, types.TimesheetAggregation{
 					GroupID:      groupID,
 					ContractorID: contractor.ID,
@@ -130,8 +131,12 @@ func (h *ContractorsHandler) GetContractors(w http.ResponseWriter, r *http.Reque
 			}
 
 			// Get the timesheet
-			timesheet, err := h.timesheetsDB.GetTimesheet(fmt.Sprintf("%s_%s", request.ID, contractor.ID))
+			timesheet, err := h.timesheetsDB.GetTimesheet(contractor.ID, request.ID)
 			if err != nil {
+				if err == iterator.Done {
+					// No timesheet found
+					continue
+				}
 				h.errorReporterService.ReportError(w, r, fmt.Errorf("could not get timesheet: %w", err))
 				continue
 			}

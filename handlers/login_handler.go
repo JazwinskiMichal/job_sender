@@ -105,7 +105,6 @@ func (h *LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the session
-	// TODO: czy lepiej tutaj trzymac owner id wgl nie zapisywac do session i doczytywac z bazy jak w mainhandler?
 	_, err = h.sessionManagerService.CreateSession(w, r, constants.UserSessionName, expirationTimestamp, data)
 	if err != nil {
 		h.showError(w, r, "Could not create session")

@@ -16,6 +16,6 @@ type Contractor struct {
 }
 
 type LastRequest struct {
-	ID          string `firestore:"id"`
-	TimesheetID string `firestore:"timesheet_id"`
+	ID        string `firestore:"id"`
+	Timestamp int64  `firestore:"timestamp"`
 }

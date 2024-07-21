@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
 	"job_sender/core"
@@ -82,6 +83,19 @@ func (h *TimesheetsHandler) RequestTimesheet(w http.ResponseWriter, r *http.Requ
 
 	// Send timesheet request emails to the contractors
 	for _, contractor := range contractors {
+		var requestExists bool
+		parsedRequestID := strings.ReplaceAll(strings.ReplaceAll(requestID, "/", "_"), " ", "-")
+
+		if contractor.LastRequests != nil {
+			for _, lastRequest := range contractor.LastRequests {
+				requestExists = lastRequest.ID == parsedRequestID && lastRequest.Timestamp != 0
+			}
+		}
+
+		if requestExists {
+			continue
+		}
+
 		err = h.emailService.SendTimesheetRequestEmail(contractor, requestID)
 		if err != nil {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to send timesheet request email: %w", err))
@@ -89,7 +103,7 @@ func (h *TimesheetsHandler) RequestTimesheet(w http.ResponseWriter, r *http.Requ
 		}
 
 		// Update the contractor's last request
-		contractor.LastRequests = append(contractor.LastRequests, types.LastRequest{ID: requestID, TimesheetID: ""}) // TODO: co w przypdaku zmiany schedule, czy stare requesty maja byc usuwane?
+		contractor.LastRequests = append(contractor.LastRequests, types.LastRequest{ID: parsedRequestID, Timestamp: 0}) // TODO: co w przypdaku zmiany schedule, czy stare requesty maja byc usuwane?
 
 		// Update the contractor in the database
 		err = h.contractorsDB.UpdateContractor(contractor)
@@ -119,7 +133,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	emailSubject := fmt.Sprintf("Timesheet %s [%s]", timesheetAggregation.RequestID, timesheetAggregation.ContractorID)
+	emailSubject := fmt.Sprintf("Timesheet %s [%s]", strings.ReplaceAll(strings.ReplaceAll(timesheetAggregation.RequestID, "_", "/"), "-", " "), timesheetAggregation.ContractorID)
 
 	// Get the attachments of the email
 	attachments, err := h.emailService.GetEmailAttachments(emailSubject)
@@ -143,7 +157,6 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		}
 
 		timesheet := &types.Timesheet{
-			ID:           fmt.Sprintf("%s_%s", timesheetAggregation.RequestID, timesheetAggregation.ContractorID),
 			ContractorID: timesheetAggregation.ContractorID,
 			RequestID:    timesheetAggregation.RequestID,
 
@@ -151,7 +164,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		}
 
 		// Add the timesheet to the database
-		h.timesheetsDB.AddTimesheet(timesheet) // TODO: Tutaj tez zapisywac trzeba mądrze, bo aktualnie za kazdym odswieżeniem Contractors list jest wyzwalany task do pobierania timesheet z maila
+		h.timesheetsDB.AddTimesheet(timesheet)
 
 		// Get contractor
 		contractor, err := h.contractorsDB.GetContractor(timesheetAggregation.ContractorID)
@@ -164,7 +177,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		// Update contractors last request
 		for i, lastRequest := range contractor.LastRequests {
 			if lastRequest.ID == timesheetAggregation.RequestID {
-				contractor.LastRequests[i].TimesheetID = timesheet.ID
+				contractor.LastRequests[i].Timestamp = time.Now().Unix()
 			}
 		}
 

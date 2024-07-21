@@ -13,9 +13,11 @@ import (
 )
 
 type GroupsDatabaseService struct {
-	ownerCollectionName string
-	groupCollectionName string
-	client              *firestore.Client
+	ownerCollectionName       string
+	groupCollectionName       string
+	contractorsCollectionName string
+	timesheetsCollectionName  string
+	client                    *firestore.Client
 }
 
 // Ensure GroupsDatabaseService implements IGroupsDatabaseService.
@@ -38,9 +40,11 @@ func NewGroupsDatabaseService(firebaseService *FirebaseService) (*GroupsDatabase
 	}
 
 	return &GroupsDatabaseService{
-		ownerCollectionName: "owners",
-		groupCollectionName: "groups",
-		client:              client,
+		ownerCollectionName:       "owners",
+		groupCollectionName:       "groups",
+		contractorsCollectionName: "contractors",
+		timesheetsCollectionName:  "timesheets",
+		client:                    client,
 	}, nil
 }
 
@@ -140,31 +144,45 @@ func (db *GroupsDatabaseService) DeleteGroup(id string) error {
 	}
 
 	// Delete all contractors in the group.
-	contractors, err := db.client.Collection("contractors").Where("group_id", "==", group.ID).Documents(ctx).GetAll()
+	contractors, err := db.client.Collection(db.contractorsCollectionName).Where("group_id", "==", group.ID).Documents(ctx).GetAll()
 	if err != nil {
 		return fmt.Errorf("could not get contractors: %w", err)
 	}
 
-	for _, contractor := range contractors {
-		// Delete timesheets
-		timesheets, err := db.client.Collection("contractors").Doc(contractor.Ref.ID).Collection("timesheets").Documents(ctx).GetAll()
+	for _, contractorRaw := range contractors {
+		var contractor types.Contractor
+		err = contractorRaw.DataTo(&contractor)
 		if err != nil {
-			if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("could not convert contractor data: %w", err)
+		}
+
+		// Delete lastRequests
+		for _, lastRequest := range contractor.LastRequests {
+			if lastRequest.Timestamp == 0 {
 				continue
 			}
-			return fmt.Errorf("could not get timesheets: %w", err)
-		}
 
-		for _, timesheet := range timesheets {
-			_, err := db.client.Collection("contractors").Doc(contractor.Ref.ID).Collection("timesheets").Doc(timesheet.Ref.ID).Delete(ctx)
+			// Directly delete the timesheet without fetching it first
+			timesheets, err := db.client.Collection(db.timesheetsCollectionName).Where("request_id", "==", lastRequest.ID).Documents(ctx).GetAll()
 			if err != nil {
-				return fmt.Errorf("could not delete timesheet: %w", err)
+				// Log the error but don't return, allowing other deletions to proceed
+				fmt.Printf("Could not get timesheets %s: %v\n", lastRequest.ID, err)
+				continue
+			}
+
+			for _, timesheet := range timesheets {
+				_, err := db.client.Collection(db.timesheetsCollectionName).Doc(timesheet.Ref.ID).Delete(ctx)
+				if err != nil {
+					// Log the error but don't return, allowing other deletions to proceed
+					fmt.Printf("Could not delete timesheet %s: %v\n", timesheet.Ref.ID, err)
+					continue
+				}
 			}
 		}
 
-		contractorID := contractor.Ref.ID
+		contractorID := contractorRaw.Ref.ID
 
-		_, err = db.client.Collection("contractors").Doc(contractorID).Delete(ctx)
+		_, err = db.client.Collection(db.contractorsCollectionName).Doc(contractorID).Delete(ctx)
 		if err != nil {
 			return fmt.Errorf("could not delete contractor: %w", err)
 		}

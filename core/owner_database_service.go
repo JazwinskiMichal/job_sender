@@ -142,6 +142,7 @@ func (db *OwnerDatabaseService) UpdateOwner(owner *types.Owner) error {
 	return nil
 }
 
+// TODO: at the moment theres not ui to delete an owner, also needs to be double check especially according to deleting the timesheets
 // DeleteOwner deletes an owner, group and all contractors.
 func (db *OwnerDatabaseService) DeleteOwner(id string) error {
 	ctx := context.Background()

@@ -72,10 +72,14 @@ func (db *TimesheetsDatabaseService) ListTimesheets(groupID string) ([]*types.Ti
 }
 
 // GetTimesheet gets a timesheet by ID.
-func (db *TimesheetsDatabaseService) GetTimesheet(id string) (*types.Timesheet, error) {
+func (db *TimesheetsDatabaseService) GetTimesheet(contractorID string, requestID string) (*types.Timesheet, error) {
 	ctx := context.Background()
-	doc, err := db.client.Collection(db.collectionName).Where("id", "==", id).Documents(ctx).Next()
-	if err != nil {
+	iter := db.client.Collection(db.collectionName).Where("contractor_id", "==", contractorID).Where("request_id", "==", requestID).Documents(ctx)
+	doc, err := iter.Next()
+	if err == iterator.Done {
+		// Directly return iterator.Done to indicate no timesheet found
+		return nil, iterator.Done
+	} else if err != nil {
 		return nil, fmt.Errorf("could not get timesheet: %w", err)
 	}
 
@@ -93,7 +97,7 @@ func (db *TimesheetsDatabaseService) AddTimesheet(timesheet *types.Timesheet) er
 	ctx := context.Background()
 	ref := db.client.Collection(db.collectionName).NewDoc()
 	timesheetMap := map[string]interface{}{
-		"id":            timesheet.ID,
+		"id":            ref.ID,
 		"contractor_id": timesheet.ContractorID,
 		"request_id":    timesheet.RequestID,
 
