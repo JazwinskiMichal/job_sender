@@ -97,7 +97,7 @@ func (db *ContractorsDatabaseService) AddContractor(groupID string, contractor *
 	ctx := context.Background()
 
 	// Check if contractor already exists.
-	iter := db.client.Collection(db.contractorsCollectionName).Where("email", "==", contractor.Email).Documents(ctx)
+	iter := db.client.Collection(db.contractorsCollectionName).Where("group_id", "==", groupID).Where("email", "==", contractor.Email).Documents(ctx)
 	for {
 		_, err := iter.Next()
 		if err == iterator.Done {
