@@ -2,7 +2,7 @@ package types
 
 // TimesheetAggregation represents a timesheet aggregation.
 type TimesheetAggregation struct {
-	ContractorID string
-	GroupID      string
-	RequestID    string
+	RequestID string
+
+	Contractor *Contractor
 }

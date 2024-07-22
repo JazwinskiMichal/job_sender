@@ -133,7 +133,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	emailSubject := fmt.Sprintf("Timesheet %s [%s]", strings.ReplaceAll(strings.ReplaceAll(timesheetAggregation.RequestID, "_", "/"), "-", " "), timesheetAggregation.ContractorID)
+	emailSubject := fmt.Sprintf("Timesheet %s [%s]", strings.ReplaceAll(strings.ReplaceAll(timesheetAggregation.RequestID, "_", "/"), "-", " "), timesheetAggregation.Contractor.ID)
 
 	// Get the attachments of the email
 	attachments, err := h.emailService.GetEmailAttachments(emailSubject)
@@ -149,7 +149,13 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		extension := path.Ext(attachment.Filename)
 
 		// Save the timesheet to the storage
-		timesheetUrl, err := h.storageService.UploadFile(fmt.Sprintf("%s_%s_timesheet%s", timesheetAggregation.GroupID, timesheetAggregation.ContractorID, extension), attachment.Content)
+		metadata := map[string]string{
+			"RequestID":    timesheetAggregation.RequestID,
+			"ContractorID": timesheetAggregation.Contractor.ID,
+		}
+
+		objectName := fmt.Sprintf("%s-%s_%s%s", timesheetAggregation.Contractor.Name, timesheetAggregation.Contractor.Surname, timesheetAggregation.RequestID, extension)
+		timesheetUrl, err := h.storageService.UploadFile(timesheetAggregation.Contractor.GroupID+"/"+objectName, attachment.Content, metadata)
 		if err != nil {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to upload timesheet to storage: %w", err))
 			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
@@ -157,7 +163,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		}
 
 		timesheet := &types.Timesheet{
-			ContractorID: timesheetAggregation.ContractorID,
+			ContractorID: timesheetAggregation.Contractor.ID,
 			RequestID:    timesheetAggregation.RequestID,
 
 			StorageURL: timesheetUrl,
@@ -167,7 +173,7 @@ func (h *TimesheetsHandler) AggregateTimesheet(w http.ResponseWriter, r *http.Re
 		h.timesheetsDB.AddTimesheet(timesheet)
 
 		// Get contractor
-		contractor, err := h.contractorsDB.GetContractor(timesheetAggregation.ContractorID)
+		contractor, err := h.contractorsDB.GetContractor(timesheetAggregation.Contractor.ID)
 		if err != nil {
 			h.errorReporterService.ReportError(w, r, fmt.Errorf("failed to get contractor: %w", err))
 			http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)

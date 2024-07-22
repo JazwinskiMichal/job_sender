@@ -120,9 +120,9 @@ func (h *ContractorsHandler) GetContractors(w http.ResponseWriter, r *http.Reque
 		for _, request := range contractor.LastRequests {
 			if request.Timestamp == 0 {
 				_, err := h.cloudTaskService.CreateTimesheetAggregatorTask(h.envVariables.ProjectID, h.envVariables.ProjectLocationID, h.envVariables.EmailAggregatorQueueName, contractor, types.TimesheetAggregation{
-					GroupID:      groupID,
-					ContractorID: contractor.ID,
-					RequestID:    request.ID,
+					RequestID: request.ID,
+
+					Contractor: contractor,
 				})
 				if err != nil {
 					h.errorReporterService.ReportError(w, r, fmt.Errorf("could not create timesheet aggregator task: %w", err))

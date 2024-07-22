@@ -6,6 +6,7 @@ import (
 	"job_sender/interfaces"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 )
 
 type StorageService struct {
@@ -44,12 +45,17 @@ func NewStorageService(bucketName string) (*StorageService, error) {
 }
 
 // UploadFile uploads a file to a storage bucket.
-func (s *StorageService) UploadFile(objectName string, data []byte) (string, error) {
+func (s *StorageService) UploadFile(objectName string, data []byte, metadata map[string]string) (string, error) {
 	ctx := context.Background()
 
 	// Create a new object in the bucket
 	obj := s.storageBucket.Object(objectName)
 	w := obj.NewWriter(ctx)
+
+	// Set custom metadata
+	if metadata != nil {
+		w.ObjectAttrs.Metadata = metadata
+	}
 
 	// TODO: storage.AllUsers gives public read access to anyone.
 	w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
@@ -72,4 +78,30 @@ func (s *StorageService) UploadFile(objectName string, data []byte) (string, err
 
 	const publicURL = "https://storage.googleapis.com/%s/%s"
 	return fmt.Sprintf(publicURL, s.storageBucketName, objectName), nil
+}
+
+// DeleteFiles deletes files with the given prefix name.
+func (s *StorageService) DeleteFiles(prefixName string) error {
+	ctx := context.Background()
+
+	// Get all the objects in the bucket
+	it := s.storageBucket.Objects(ctx, &storage.Query{Prefix: prefixName})
+
+	// Delete all the objects with the given prefix
+	for {
+		objAttrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("could not get next object: %v", err)
+		}
+
+		err = s.storageBucket.Object(objAttrs.Name).Delete(ctx)
+		if err != nil {
+			return fmt.Errorf("could not delete object: %v", err)
+		}
+	}
+
+	return nil
 }

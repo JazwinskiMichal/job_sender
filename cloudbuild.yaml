@@ -5,7 +5,7 @@ substitutions:
   _SERVICE_NAME: job-sender
   _SERVICE_ACCOUNT_EMAIL: 'sa-backend@job-sender-424116.iam.gserviceaccount.com'
   _IMAGE_NAME: job-sender
-  _IMAGE_TAG: v1.0.126
+  _IMAGE_TAG: v1.0.134
   _REPOSITORY: job-sender-repository
   _TIMESHEETS_BUCKET_NAME: job-sender-timesheets
   _EMAIL_AGGREGATOR_QUEUE_NAME: email-aggregator-queue

@@ -92,6 +92,23 @@ func (db *TimesheetsDatabaseService) GetTimesheet(contractorID string, requestID
 	return &timesheet, nil
 }
 
+// GetTimesheetByID gets a timesheet by ID.
+func (db *TimesheetsDatabaseService) GetTimesheetByID(id string) (*types.Timesheet, error) {
+	ctx := context.Background()
+	doc, err := db.client.Collection(db.collectionName).Doc(id).Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not get timesheet: %w", err)
+	}
+
+	var timesheet types.Timesheet
+	err = doc.DataTo(&timesheet)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert data to timesheet: %w", err)
+	}
+
+	return &timesheet, nil
+}
+
 // AddTimesheet adds a timesheet.
 func (db *TimesheetsDatabaseService) AddTimesheet(timesheet *types.Timesheet) error {
 	ctx := context.Background()

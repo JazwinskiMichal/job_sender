@@ -12,6 +12,9 @@ type ITimesheetsDatabaseService interface {
 	// GetTimesheet gets a timesheet by ContractorID and RequestID.
 	GetTimesheet(contractorID string, requestID string) (*types.Timesheet, error)
 
+	// GetTimesheetByID gets a timesheet by ID.
+	GetTimesheetByID(id string) (*types.Timesheet, error)
+
 	// AddTimesheet adds a timesheet to a group.
 	AddTimesheet(timesheet *types.Timesheet) error
 

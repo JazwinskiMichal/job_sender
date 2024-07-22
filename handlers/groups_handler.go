@@ -21,6 +21,7 @@ type GroupsHandler struct {
 	authService           *core.AuthService
 	schedulerService      *core.SchedulerService
 	sessionManagerService *core.SessionManagerService
+	storageService        *core.StorageService
 	templateService       *core.TemplateService
 	errorReporterService  *core.ErrorReporterService
 
@@ -29,11 +30,12 @@ type GroupsHandler struct {
 }
 
 // NewGroupsHandler creates a new GroupsHandler.
-func NewGroupsHandler(authService *core.AuthService, schedulerService *core.SchedulerService, sessionManagerService *core.SessionManagerService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService, ownersDB *core.OwnerDatabaseService, groupsDB *core.GroupsDatabaseService) *GroupsHandler {
+func NewGroupsHandler(authService *core.AuthService, schedulerService *core.SchedulerService, sessionManagerService *core.SessionManagerService, storageService *core.StorageService, templateService *core.TemplateService, errorReporterService *core.ErrorReporterService, ownersDB *core.OwnerDatabaseService, groupsDB *core.GroupsDatabaseService) *GroupsHandler {
 	return &GroupsHandler{
 		authService:           authService,
 		schedulerService:      schedulerService,
 		sessionManagerService: sessionManagerService,
+		storageService:        storageService,
 		templateService:       templateService,
 		errorReporterService:  errorReporterService,
 
@@ -276,6 +278,14 @@ func (h *GroupsHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	err = h.schedulerService.DeleteTimesheetRequestJob(groupID)
 	if err != nil {
 		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete timesheet request job: %w", err))
+		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
+		return
+	}
+
+	// Delete the timesheets from the storage.
+	err = h.storageService.DeleteFiles(groupID)
+	if err != nil {
+		h.errorReporterService.ReportError(w, r, fmt.Errorf("could not delete timesheets: %w", err))
 		http.Redirect(w, r, "/somethingWentWrong", http.StatusSeeOther)
 		return
 	}

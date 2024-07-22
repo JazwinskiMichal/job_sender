@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"job_sender/core"
 	"job_sender/handlers"
@@ -143,7 +144,7 @@ func main() {
 	ownersHandler.RegisterOwnersHandlers(authRouter)
 
 	// Create groups handler
-	groupsHandler := handlers.NewGroupsHandler(authService, schedulerService, sessionManagerService, templateService, errorReporterService, ownersDB, groupsDB)
+	groupsHandler := handlers.NewGroupsHandler(authService, schedulerService, sessionManagerService, storageService, templateService, errorReporterService, ownersDB, groupsDB)
 	groupsHandler.RegisterGroupsHandlers(authRouter)
 
 	// Create contractor handler
@@ -154,8 +155,17 @@ func main() {
 	timesheetsHandler := handlers.NewTimesheetsHandler(emailService, storageService, errorReporterService, groupsDB, contractorsDB, timesheetsDB)
 	timesheetsHandler.RegisterTimesheetsHandlers(router)
 
+	// Configure the server
+	server := &http.Server{
+		Addr:         ":" + envVariables.Port,
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+		Handler:      router,
+	}
+
 	// Start the server
-	if err := http.ListenAndServe(":"+envVariables.Port, router); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
