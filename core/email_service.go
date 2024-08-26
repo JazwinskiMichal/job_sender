@@ -5,14 +5,14 @@ import (
 	"io"
 	"net/smtp"
 	"strconv"
+	"strings"
 
 	"job_sender/interfaces"
 	"job_sender/types"
 	constants "job_sender/utils/constants"
 
 	"github.com/emersion/go-imap"
-	imapClient "github.com/emersion/go-imap/client"
-	"github.com/emersion/go-message/mail"
+	"github.com/emersion/go-imap/client"
 )
 
 type EmailService struct {
@@ -69,7 +69,7 @@ func (h *EmailService) SendTimesheetRequestEmail(contractor *types.Contractor, r
 // GetEmailAttachments returns the attachments of an email.
 func (h *EmailService) GetEmailAttachments(subject string) ([]types.Attachment, error) {
 	// Create a new IMAP client instance
-	c, err := imapClient.DialTLS(constants.ImapGmailAddress+":993", nil)
+	c, err := client.DialTLS(constants.ImapGmailAddress+":993", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -104,54 +104,23 @@ func (h *EmailService) GetEmailAttachments(subject string) ([]types.Attachment, 
 	// Fetch the emails
 	seqSet := new(imap.SeqSet)
 	seqSet.AddNum(uids...)
+
+	// We're only interested in the email structure and attachments
 	section := &imap.BodySectionName{}
-	items := []imap.FetchItem{section.FetchItem()}
+	items := []imap.FetchItem{imap.FetchBodyStructure, section.FetchItem()}
+
 	messages := make(chan *imap.Message, len(uids))
-	err = c.Fetch(seqSet, items, messages)
-	if err != nil {
+	if err := c.Fetch(seqSet, items, messages); err != nil {
 		return nil, fmt.Errorf("failed to fetch emails: %w", err)
 	}
 
 	var attachments []types.Attachment
 	for msg := range messages {
-		r := msg.GetBody(section)
-		if r == nil {
-			continue
-		}
-
-		mr, err := mail.CreateReader(r)
+		attachs, err := h.extractAttachments(msg, c)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create mail reader: %w", err)
+			return nil, fmt.Errorf("failed to extract attachments: %w", err)
 		}
-
-		// Ensure the mail reader is closed after processing the email
-		func() {
-			defer mr.Close()
-
-			// Iterate through each part of the email.
-			for {
-				p, err := mr.NextPart()
-				if err == io.EOF {
-					break
-				} else if err != nil {
-					return // Log or handle the error as needed
-				}
-
-				switch h := p.Header.(type) {
-				case *mail.AttachmentHeader:
-					// This is an attachment
-					filename, err := h.Filename()
-					if err != nil {
-						return // Log or handle the error as needed
-					}
-					content, err := io.ReadAll(p.Body)
-					if err != nil {
-						return // Log or handle the error as needed
-					}
-					attachments = append(attachments, types.Attachment{Filename: filename, Content: content})
-				}
-			}
-		}()
+		attachments = append(attachments, attachs...)
 	}
 
 	return attachments, nil
@@ -160,7 +129,7 @@ func (h *EmailService) GetEmailAttachments(subject string) ([]types.Attachment, 
 // ArchiveEmail archives emails matching the given subject by removing them from the INBOX.
 func (h *EmailService) ArchiveEmail(subject string) error {
 	// Create a new IMAP client instance
-	c, err := imapClient.DialTLS(constants.ImapGmailAddress+":993", nil)
+	c, err := client.DialTLS(constants.ImapGmailAddress+":993", nil)
 	if err != nil {
 		return err
 	}
@@ -207,4 +176,84 @@ func (h *EmailService) ArchiveEmail(subject string) error {
 	}
 
 	return nil
+}
+
+func (h *EmailService) extractAttachments(msg *imap.Message, c *client.Client) ([]types.Attachment, error) {
+	var attachments []types.Attachment
+
+	// Helper function to recursively extract attachments
+	var extractParts func(*imap.BodyStructure, []int) error
+	extractParts = func(part *imap.BodyStructure, path []int) error {
+		if part.Disposition == "attachment" || part.Disposition == "inline" {
+			section := &imap.BodySectionName{
+				BodyPartName: imap.BodyPartName{
+					Path: path,
+				},
+				Peek: true,
+			}
+
+			fetchItem := section.FetchItem()
+			seqSet := new(imap.SeqSet)
+			seqSet.AddNum(msg.SeqNum)
+
+			items := []imap.FetchItem{fetchItem}
+
+			// Create a channel to receive the fetched message
+			fetchedMsg := make(chan *imap.Message, 1)
+
+			// Fetch the message part
+			err := c.Fetch(seqSet, items, fetchedMsg)
+			if err != nil {
+				return fmt.Errorf("failed to fetch attachment: %w", err)
+			}
+
+			// Read the message from the channel
+			m := <-fetchedMsg
+
+			body := m.GetBody(section)
+			if body == nil {
+				return fmt.Errorf("no body found for attachment")
+			}
+
+			content, err := io.ReadAll(body)
+			if err != nil {
+				return fmt.Errorf("failed to read attachment content: %w", err)
+			}
+
+			// Extract filename from DispositionParams
+			filename := ""
+			if part.DispositionParams != nil {
+				filename = part.DispositionParams["filename"]
+			}
+			if filename == "" {
+				// Fallback to Content-Type name parameter
+				filename = part.Params["name"]
+			}
+			if filename == "" {
+				// If still no filename, generate one based on the part path
+				filename = fmt.Sprintf("attachment_%s", strings.Join(strings.Fields(fmt.Sprint(path)), "_"))
+			}
+
+			attachments = append(attachments, types.Attachment{
+				Filename: filename,
+				Content:  content,
+			})
+		}
+
+		for i, subpart := range part.Parts {
+			newPath := append(path, i+1)
+			if err := extractParts(subpart, newPath); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	// Start the recursive extraction from the root
+	if err := extractParts(msg.BodyStructure, []int{}); err != nil {
+		return nil, err
+	}
+
+	return attachments, nil
 }
