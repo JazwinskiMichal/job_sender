@@ -103,7 +103,7 @@ func (h *TimesheetsHandler) RequestTimesheet(w http.ResponseWriter, r *http.Requ
 		}
 
 		// Update the contractor's last request
-		contractor.LastRequests = append(contractor.LastRequests, types.LastRequest{ID: parsedRequestID, Timestamp: 0}) // TODO: co w przypdaku zmiany schedule, czy stare requesty maja byc usuwane?
+		contractor.LastRequests = append(contractor.LastRequests, types.LastRequest{ID: parsedRequestID, Timestamp: 0}) // TODO: should old requests be deleted when schedule changes?
 
 		// Update the contractor in the database
 		err = h.contractorsDB.UpdateContractor(contractor)

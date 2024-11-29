@@ -11,8 +11,8 @@ substitutions:
   _EMAIL_AGGREGATOR_QUEUE_NAME: email-aggregator-queue
   _SECRET_NAME_SERVICE_ACCOUNT_KEY: job-sender-service-account-key
   _SECRET_NAME_FIREBASE_WEB_API_KEY: job-sender-firebase-web-api-key
-  _SECRET_NAME_EMAIL_SERVICE_EMAIL: job-sender-email-service-email # TODO: zmienic na maila job sender, narazie uzyty mail z proteggo
-  _SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD: job-sender-email-service-app-password # TODO: ustawic app password dla maila job sender
+  _SECRET_NAME_EMAIL_SERVICE_EMAIL: job-sender-email-service-email
+  _SECRET_NAME_EMAIL_SERVICE_APP_PASSWORD: job-sender-email-service-app-password
   _SECRET_NAME_SESSION_COOKIE_STORE: job-sender-session-cookie-store-key
 
 steps:

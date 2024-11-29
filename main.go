@@ -169,6 +169,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
-// TODO: dać możliwość na liście kontraktowców do ręcznego wyzwolenia timesheet request, ale z tym trzeba pomyslec, bo wtedy ten request ma byc na jaki zakres???
-// TODO: kolejny etap to z wykorzystaniem email service wysłać maila zbiorczego do klienta celem zatwierdzenia kart pracy, dodać notyfikacje jak klient odpisze. do tego jest potrzeba również konfiguracji klientów
