@@ -45,7 +45,7 @@ func (s *SessionManagerService) CreateSession(w http.ResponseWriter, r *http.Req
 	// Set the session options
 	session.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   maxAge, // TODO: ustawic niski maxAge i sprawdzić co sie stanie jak sesja wygaśnie
+		MaxAge:   maxAge, // TODO: set low maxAge and test, what would happen when session ends
 		HttpOnly: true,
 		Secure:   true,                 // Only send cookie over HTTPS
 		SameSite: http.SameSiteLaxMode, // Adjust according to your requirements
